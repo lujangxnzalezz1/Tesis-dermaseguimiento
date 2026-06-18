@@ -41,16 +41,19 @@ Ingeniería Informática — UNIDA
 | Control de versiones | Git + GitHub | 2.54.0 |
 
 ## Estructura del proyecto
+
+```
 proyectoDeTesis/
 ├── backend/
-│   ├── main.py          # Punto de entrada del servidor
-│   ├── routers/         # Endpoints organizados por módulo
-│   ├── models/          # Modelos de base de datos
-│   ├── schemas/         # Validación de datos
-│   ├── services/        # Lógica de negocio
-│   └── core/            # Configuración general
+│   ├── main.py          
+│   ├── routers/         
+│   ├── models/          
+│   ├── schemas/         
+│   ├── services/        
+│   └── core/            
 ├── .gitignore
 └── README.md
+```
 
 ## Instalación y configuración
 
