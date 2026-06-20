@@ -1,4 +1,4 @@
-# Facial Traceability API
+# Facial Traceability
 
 ![Estado](https://img.shields.io/badge/Estado-En%20desarrollo-yellow)
 ![Python](https://img.shields.io/badge/Python-3.12.7-blue)
