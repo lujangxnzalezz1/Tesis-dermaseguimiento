@@ -1,0 +1,17 @@
+# ---------- Backend (Python) ----------
+backend/venv/
+backend/__pycache__/
+backend/.python-version
+*.pyc
+
+# ---------- Frontend (Node / Expo) ----------
+dermaseguimiento/node_modules/
+dermaseguimiento/.expo/
+dermaseguimiento/app-example/
+
+# ---------- Mac ----------
+.DS_Store
+
+# ---------- Variables de entorno / secretos ----------
+.env
+*.env.local
