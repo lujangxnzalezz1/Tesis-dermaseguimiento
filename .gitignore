@@ -9,8 +9,12 @@ dermaseguimiento/node_modules/
 dermaseguimiento/.expo/
 dermaseguimiento/app-example/
 
-# ---------- Mac ----------
+# ---------- Base de datos local ----------
+*.db
+
+# ---------- Mac / Windows ----------
 .DS_Store
+Thumbs.db
 
 # ---------- Variables de entorno / secretos ----------
 .env
