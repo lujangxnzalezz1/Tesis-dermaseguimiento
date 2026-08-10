@@ -5,3 +5,9 @@ psycopg2-binary
 python-dotenv
 pydantic
 pydantic-settings
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+opencv-contrib-python
+mediapipe
+numpy

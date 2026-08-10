@@ -1,16 +1,21 @@
-# Entorno virtual de Python
-venv/
-
-# Archivos compilados de Python
-__pycache__/
+# ---------- Backend (Python) ----------
+backend/venv/
+backend/__pycache__/
+backend/.python-version
 *.pyc
 
-# Variables de entorno (contraseñas y claves secretas)
-.env
+# ---------- Frontend (Node / Expo) ----------
+dermaseguimiento/node_modules/
+dermaseguimiento/.expo/
+dermaseguimiento/app-example/
 
-# Base de datos local
+# ---------- Base de datos local ----------
 *.db
 
-# Archivos del sistema
+# ---------- Mac / Windows ----------
 .DS_Store
 Thumbs.db
+
+# ---------- Variables de entorno / secretos ----------
+.env
+*.env.local
