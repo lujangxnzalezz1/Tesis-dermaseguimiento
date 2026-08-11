@@ -83,6 +83,7 @@ def procesar_par_de_imagenes(imagen_referencia_bgr: np.ndarray, imagen_nueva_bgr
     return {
         "exito": True,
         "imagen_alineada": imagen_alineada,
+        "puntos_referencia": puntos_referencia,
         "cantidad_landmarks_referencia": len(puntos_referencia),
         "cantidad_landmarks_nueva": len(puntos_nueva),
     }

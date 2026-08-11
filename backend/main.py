@@ -1,17 +1,24 @@
+import os
+
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
+from core.config import RUTA_ALMACENAMIENTO
 from core.database import Base, engine
-from models import Usuario, Paciente  # noqa: F401 - registran las tablas en Base.metadata
+from models import Usuario, Paciente, Seguimiento  # noqa: F401 - registran las tablas en Base.metadata
 from routers import auth, pacientes, procesamiento
 
 Base.metadata.create_all(bind=engine)
+
+os.makedirs(RUTA_ALMACENAMIENTO, exist_ok=True)
 
 app = FastAPI(title="DermaSeguimiento API")
 
 app.include_router(auth.router)
 app.include_router(pacientes.router)
 app.include_router(procesamiento.router)
+app.mount("/archivos", StaticFiles(directory=RUTA_ALMACENAMIENTO), name="archivos")
 
 
 @app.get("/")

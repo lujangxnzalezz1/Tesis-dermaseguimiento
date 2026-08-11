@@ -2,6 +2,7 @@
 backend/venv/
 backend/__pycache__/
 backend/.python-version
+backend/almacenamiento/
 *.pyc
 
 # ---------- Frontend (Node / Expo) ----------

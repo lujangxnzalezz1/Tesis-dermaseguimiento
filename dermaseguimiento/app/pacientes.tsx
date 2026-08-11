@@ -9,6 +9,7 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
+import { router } from 'expo-router';
 import { API_URL, obtenerToken } from '../lib/auth';
 
 type PacienteEncontrado = {
@@ -128,6 +129,38 @@ export default function PacientesScreen() {
           <Text style={styles.tarjetaTitulo}>Paciente encontrado</Text>
           <Text>Nombre: {pacienteEncontrado.nombre} {pacienteEncontrado.apellido}</Text>
           <Text>Teléfono: {pacienteEncontrado.telefono || 'No registrado'}</Text>
+
+          <TouchableOpacity
+            style={styles.button}
+            onPress={() =>
+              router.push({
+                pathname: '/procesamiento',
+                params: {
+                  pacienteId: String(pacienteEncontrado.id),
+                  nombre: pacienteEncontrado.nombre,
+                  apellido: pacienteEncontrado.apellido,
+                },
+              })
+            }
+          >
+            <Text style={styles.buttonText}>Nuevo seguimiento</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.botonSecundario}
+            onPress={() =>
+              router.push({
+                pathname: '/historial',
+                params: {
+                  pacienteId: String(pacienteEncontrado.id),
+                  nombre: pacienteEncontrado.nombre,
+                  apellido: pacienteEncontrado.apellido,
+                },
+              })
+            }
+          >
+            <Text style={styles.botonSecundarioText}>Ver historial</Text>
+          </TouchableOpacity>
         </View>
       )}
 
@@ -190,6 +223,15 @@ const styles = StyleSheet.create({
     marginTop: 20,
   },
   buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  botonSecundario: {
+    borderWidth: 1,
+    borderColor: '#1D3D47',
+    borderRadius: 8,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  botonSecundarioText: { color: '#1D3D47', fontSize: 16, fontWeight: '600' },
   tarjetaEncontrado: {
     marginTop: 24,
     padding: 16,
