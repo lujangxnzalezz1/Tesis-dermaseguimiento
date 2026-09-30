@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import relationship
 
 from core.database import Base
@@ -32,6 +32,19 @@ class Seguimiento(Base):
 
     # RNF-06: tiempo de procesamiento medido en el servidor
     tiempo_procesamiento_ms = Column(Integer, nullable=True)
+
+    # RF-13: similitud estructural antes y después de alinear (sobre la región del rostro)
+    ssim_antes = Column(Float, nullable=True)
+    ssim_despues = Column(Float, nullable=True)
+
+    # RF-14 / RF-15: lesiones detectadas con YOLOv8 y comparación con la referencia
+    lesiones_referencia = Column(Integer, nullable=True)
+    lesiones_nueva = Column(Integer, nullable=True)
+    lesiones_nuevas = Column(Integer, nullable=True)
+    lesiones_persistentes = Column(Integer, nullable=True)
+    lesiones_resueltas = Column(Integer, nullable=True)
+    lesiones_detalle = Column(Text, nullable=True)  # JSON con los recuadros
+    ruta_imagen_lesiones = Column(String, nullable=True)
 
     paciente = relationship("Paciente")
     usuario = relationship("Usuario")

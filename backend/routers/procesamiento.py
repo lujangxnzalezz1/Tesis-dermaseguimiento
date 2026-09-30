@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import time
@@ -23,6 +24,9 @@ from services import almacenamiento as alm
 from services import auditoria_service as audit
 from services.analisis_colorimetrico import analizar_color
 from services.calidad_captura import evaluar_captura
+from services import deteccion_acne
+from services.analisis_colorimetrico import _calcular_mascara_rostro
+from services.similitud import ssim
 from services.procesamiento_imagenes import procesar_par_de_imagenes
 from services.suscripcion_service import exigir_acceso_avanzado
 
@@ -54,6 +58,10 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         l_nueva=s.l_nueva, a_nueva=s.a_nueva, b_nueva=s.b_nueva,
         url_mapa_calor=f"/archivos/{s.ruta_mapa_calor}",
         tiempo_procesamiento_ms=s.tiempo_procesamiento_ms,
+        ssim_antes=s.ssim_antes, ssim_despues=s.ssim_despues,
+        lesiones_referencia=s.lesiones_referencia, lesiones_nueva=s.lesiones_nueva, lesiones_nuevas=s.lesiones_nuevas,
+        lesiones_persistentes=s.lesiones_persistentes, lesiones_resueltas=s.lesiones_resueltas,
+        url_imagen_lesiones=f"/archivos/{s.ruta_imagen_lesiones}" if s.ruta_imagen_lesiones else None,
     )
 
 
@@ -100,6 +108,19 @@ def procesar_seguimiento(
             audit.registrar_fallo(db, request, usuario_actual, "seguimientos", "procesar", analisis["error"],
                                   entidad="paciente", entidad_id=paciente.id)
             raise HTTPException(422, analisis["error"])
+        alto, ancho = ref_bgr.shape[:2]
+        mascara = _calcular_mascara_rostro(resultado["puntos_referencia"], alto, ancho) == 255
+        # RF-13: SSIM sin alinear (solo redimensionada) vs. alineada, sobre el rostro
+        ssim_antes = ssim(ref_bgr, cv2.resize(nueva_bgr, (ancho, alto)), mascara)
+        ssim_despues = ssim(ref_bgr, resultado["imagen_alineada"], mascara)
+        # RF-14 / RF-15: detección y comparación de lesiones (si el modelo está instalado)
+        lesiones = None
+        if deteccion_acne.disponible():
+            en_ref = deteccion_acne.detectar_lesiones(ref_bgr, mascara)
+            en_nueva = deteccion_acne.detectar_lesiones(resultado["imagen_alineada"], mascara)
+            comp = deteccion_acne.comparar_lesiones(en_ref, en_nueva)
+            lesiones = {"referencia": en_ref, "nueva": en_nueva, **comp,
+                        "imagen": deteccion_acne.dibujar_comparacion(resultado["imagen_alineada"], comp)}
     except HTTPException:
         raise
     except Exception:
@@ -108,11 +129,15 @@ def procesar_seguimiento(
     tiempo_ms = int((time.perf_counter() - inicio) * 1000)
 
     claves = {k: alm.nueva_clave() for k in ("ref", "nueva", "alineada", "mapa")}
+    if lesiones:
+        claves["lesiones"] = alm.nueva_clave()
     try:
         alm.guardar_imagen(ref_bgr, claves["ref"])
         alm.guardar_imagen(nueva_bgr, claves["nueva"])
         alm.guardar_imagen(resultado["imagen_alineada"], claves["alineada"])
         alm.guardar_imagen(analisis["mapa_calor"], claves["mapa"])
+        if lesiones:
+            alm.guardar_imagen(lesiones["imagen"], claves["lesiones"])
         seg = Seguimiento(
             paciente_id=paciente.id, usuario_id=usuario_actual.id, fecha=ahora(),
             ruta_imagen_referencia=claves["ref"], ruta_imagen_nueva=claves["nueva"],
@@ -122,7 +147,14 @@ def procesar_seguimiento(
             l_referencia=analisis["l_referencia"], a_referencia=analisis["a_referencia"], b_referencia=analisis["b_referencia"],
             l_nueva=analisis["l_nueva"], a_nueva=analisis["a_nueva"], b_nueva=analisis["b_nueva"],
             tiempo_procesamiento_ms=tiempo_ms,
+            ssim_antes=round(ssim_antes, 4), ssim_despues=round(ssim_despues, 4),
         )
+        if lesiones:
+            seg.lesiones_referencia, seg.lesiones_nueva = len(lesiones["referencia"]), len(lesiones["nueva"])
+            seg.lesiones_nuevas, seg.lesiones_persistentes = len(lesiones["nuevas"]), len(lesiones["persistentes"])
+            seg.lesiones_resueltas = len(lesiones["resueltas"])
+            seg.lesiones_detalle = json.dumps({k: lesiones[k] for k in ("referencia", "nueva", "nuevas", "persistentes", "resueltas")})
+            seg.ruta_imagen_lesiones = claves["lesiones"]
         db.add(seg)
         db.commit()
         db.refresh(seg)
@@ -174,6 +206,7 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
             or_(
                 Seguimiento.ruta_imagen_referencia == clave, Seguimiento.ruta_imagen_nueva == clave,
                 Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
+                Seguimiento.ruta_imagen_lesiones == clave,
             ),
         )
         .first()

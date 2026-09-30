@@ -187,3 +187,33 @@ export function ReglasPassword({ reglas }: { reglas: { texto: string; cumple: bo
     </View>
   );
 }
+
+/** Resultado de la detección de lesiones (RF-14/15) y de la similitud antes/después de alinear (RF-13). */
+export function ResumenLesiones({ s }: { s: any }) {
+  return (
+    <View style={{ marginTop: 12 }}>
+      {s.ssim_antes != null && s.ssim_despues != null && (
+        <Text style={{ color: '#444' }}>
+          Similitud estructural (SSIM): {s.ssim_antes.toFixed(3)} sin alinear → {s.ssim_despues.toFixed(3)} alineada
+        </Text>
+      )}
+      {s.lesiones_nueva == null ? (
+        <Text style={{ color: '#666', marginTop: 6 }}>Detección de lesiones no disponible en este servidor.</Text>
+      ) : (
+        <>
+          <Text style={{ fontSize: 17, fontWeight: '600', color: COLOR.primario, marginTop: 12, marginBottom: 8 }}>Regiones de lesión (YOLOv8)</Text>
+          <Text>Consulta de referencia: {s.lesiones_referencia} · Esta consulta: {s.lesiones_nueva}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+            <Text style={{ color: COLOR.error, fontWeight: '600' }}>■ Nuevas: {s.lesiones_nuevas}</Text>
+            <Text style={{ color: COLOR.ok, fontWeight: '600' }}>■ Persisten: {s.lesiones_persistentes}</Text>
+            <Text style={{ color: COLOR.aviso, fontWeight: '600' }}>▢ Ya no aparecen: {s.lesiones_resueltas}</Text>
+          </View>
+          {s.url_imagen_lesiones && <ImagenProtegida url={s.url_imagen_lesiones} />}
+          <Text style={{ color: '#666', fontSize: 12, marginTop: 6 }}>
+            El modelo marca regiones con aspecto de lesión; no clasifica ni diagnostica. La interpretación es del profesional.
+          </Text>
+        </>
+      )}
+    </View>
+  );
+}

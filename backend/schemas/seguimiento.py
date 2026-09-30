@@ -24,3 +24,11 @@ class SeguimientoRespuesta(BaseModel):
     b_nueva: float
     url_mapa_calor: str
     tiempo_procesamiento_ms: Optional[int] = None
+    ssim_antes: Optional[float] = None
+    ssim_despues: Optional[float] = None
+    lesiones_referencia: Optional[int] = None
+    lesiones_nueva: Optional[int] = None
+    lesiones_nuevas: Optional[int] = None
+    lesiones_persistentes: Optional[int] = None
+    lesiones_resueltas: Optional[int] = None
+    url_imagen_lesiones: Optional[str] = None

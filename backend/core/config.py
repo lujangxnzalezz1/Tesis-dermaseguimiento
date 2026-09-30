@@ -57,6 +57,13 @@ class Settings(BaseSettings):
     DELTA_E_MAXIMO_VISUAL: float = 30.0
     TIEMPO_MAXIMO_PROCESAMIENTO_SEGUNDOS: float = 5.0  # RNF-06 (se mide y se audita)
 
+    # --- Detección de lesiones de acné (RF-14 / RF-15) ---
+    RUTA_MODELO_ACNE: str = os.path.join(_BASE_DIR, "modelos", "acne_yolov8n.onnx")
+    ACNE_IMGSZ: int = 1024              # tamaño de entrada con el que se entrenó el modelo
+    ACNE_CONFIANZA_MIN: float = 0.25
+    ACNE_IOU_NMS: float = 0.5
+    ACNE_IOU_MISMA_LESION: float = 0.1  # solapamiento mínimo para considerar que es la misma lesión
+
     # --- Guía de captura (RF-03): umbrales del control de calidad de la foto ---
     CAPTURA_ANCHO_ROSTRO_MIN: float = 0.35   # ancho del rostro / ancho de la foto
     CAPTURA_ANCHO_ROSTRO_MAX: float = 0.80

@@ -30,3 +30,11 @@ dermaseguimiento/CLAUDE.md
 dermaseguimiento/AGENTS.md
 Tesis_respaldos/
 *.sql
+
+# ---------- Entrenamiento YOLOv8 (datos con licencia académica, pesos y resultados) ----------
+runs/
+entrenamiento_yolo/venv/
+entrenamiento_yolo/datos/
+entrenamiento_yolo/runs/
+entrenamiento_yolo/*.pt
+entrenamiento_yolo/entrenamiento.log

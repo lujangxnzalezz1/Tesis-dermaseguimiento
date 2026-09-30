@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
-import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, ResumenLesiones, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 
 const TAM = 10;
@@ -48,6 +48,7 @@ export default function HistorialScreen() {
           <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
           <Text>Delta E promedio: {s.delta_e_promedio.toFixed(2)}</Text>
           <ImagenProtegida url={s.url_mapa_calor} />
+          <ResumenLesiones s={s} />
         </Tarjeta>
       ))}
       {items.length > 0 && items.length % TAM === 0 && !cargando && (
