@@ -57,6 +57,19 @@ class Settings(BaseSettings):
     DELTA_E_MAXIMO_VISUAL: float = 30.0
     TIEMPO_MAXIMO_PROCESAMIENTO_SEGUNDOS: float = 5.0  # RNF-06 (se mide y se audita)
 
+    # --- Guía de captura (RF-03): umbrales del control de calidad de la foto ---
+    CAPTURA_ANCHO_ROSTRO_MIN: float = 0.35   # ancho del rostro / ancho de la foto
+    CAPTURA_ANCHO_ROSTRO_MAX: float = 0.80
+    CAPTURA_DESCENTRADO_MAX: float = 0.12    # distancia de la nariz al centro / tamaño de la foto
+    CAPTURA_INCLINACION_MAX_GRADOS: float = 8.0
+    CAPTURA_GIRO_MAX: float = 0.12           # asimetría horizontal de la nariz (0 = de frente)
+    CAPTURA_LUZ_MIN: float = 35.0            # L* promedio del rostro (0-100)
+    CAPTURA_LUZ_MAX: float = 85.0
+    CAPTURA_SOBREEXPUESTO_MAX: float = 0.05  # fracción de píxeles del rostro quemados
+    CAPTURA_NITIDEZ_MIN: float = 25.0        # varianza del Laplaciano sobre el rostro normalizado
+    CAPTURA_DIF_ESCALA_MAX: float = 0.15     # diferencia de tamaño del rostro con la referencia
+    CAPTURA_DIF_LUZ_MAX: float = 5.0         # diferencia de L* con la referencia
+
     # --- Privacidad ---
     POLITICA_VERSION: str = "1.0"
     RESPONSABLE_TRATAMIENTO: str = "Luján Esmeralda González López (UNIDA)"

@@ -1,8 +1,10 @@
 import logging
+import os
 import time
 from datetime import date, datetime, timedelta
 from typing import Optional
 
+import cv2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from sqlalchemy import or_
@@ -20,11 +22,24 @@ from schemas.seguimiento import SeguimientoRespuesta
 from services import almacenamiento as alm
 from services import auditoria_service as audit
 from services.analisis_colorimetrico import analizar_color
+from services.calidad_captura import evaluar_captura
 from services.procesamiento_imagenes import procesar_par_de_imagenes
 from services.suscripcion_service import exigir_acceso_avanzado
 
 router = APIRouter(tags=["Procesamiento de imágenes"])
 log = logging.getLogger("procesamiento")
+
+
+def _linea_base(db: Session, paciente_id: int) -> Optional[Seguimiento]:
+    return db.query(Seguimiento).filter(Seguimiento.paciente_id == paciente_id).order_by(Seguimiento.fecha.asc(), Seguimiento.id.asc()).first()
+
+
+def _imagen_linea_base(db: Session, paciente_id: int):
+    base = _linea_base(db, paciente_id)
+    if base is None:
+        return None
+    ruta = alm.ruta_absoluta(base.ruta_imagen_referencia)
+    return cv2.imread(ruta) if os.path.exists(ruta) else None
 
 
 def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
@@ -46,7 +61,7 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
 def procesar_seguimiento(
     request: Request,
     paciente_id: int = Form(...),
-    imagen_referencia: UploadFile = File(...),
+    imagen_referencia: Optional[UploadFile] = File(None),
     imagen_nueva: UploadFile = File(...),
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(obtener_usuario_actual),
@@ -61,7 +76,14 @@ def procesar_seguimiento(
             "Este paciente no tiene un consentimiento informado vigente. Registralo desde su ficha antes de procesar nuevas fotos.",
         )
 
-    ref_bgr, hash_ref = alm.leer_imagen_validada(imagen_referencia, "imagen de referencia")
+    if imagen_referencia is not None:
+        ref_bgr, hash_ref = alm.leer_imagen_validada(imagen_referencia, "imagen de referencia")
+    else:
+        # Sin foto de referencia: se usa la de la primera consulta del paciente (línea de base)
+        ref_bgr = _imagen_linea_base(db, paciente.id)
+        if ref_bgr is None:
+            raise HTTPException(400, "Es la primera consulta de este paciente: elegí también una foto de referencia.")
+        hash_ref = None
     nueva_bgr, hash_nueva = alm.leer_imagen_validada(imagen_nueva, "nueva captura")
     if hash_ref == hash_nueva:
         raise HTTPException(400, "Elegiste la misma foto como referencia y como nueva captura. Seleccioná dos fotos distintas.")
@@ -160,3 +182,30 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
         raise HTTPException(404, "No encontramos esa imagen o no tenés permiso para verla.")
     destino = alm.ruta_absoluta(clave)
     return FileResponse(destino, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})
+
+
+@router.get("/pacientes/{paciente_id}/referencia")
+def referencia_del_paciente(paciente_id: int, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Foto de la primera consulta: la app la muestra semitransparente sobre la cámara (guía de captura, RF-03)."""
+    paciente = obtener_paciente_propio(db, usuario_actual, paciente_id, incluir_inactivos=True)
+    base = _linea_base(db, paciente.id)
+    if base is None:
+        return {"existe": False, "url": None, "fecha": None}
+    return {"existe": True, "url": f"/archivos/{base.ruta_imagen_referencia}", "fecha": base.fecha}
+
+
+@router.post("/verificar-captura")
+def verificar_captura(
+    imagen: UploadFile = File(...),
+    paciente_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(obtener_usuario_actual),
+):
+    """RF-03: revisa la foto recién tomada (rostro, distancia, centrado, inclinación, giro, luz, nitidez) y,
+    si el paciente ya tiene consultas, la compara con su foto de referencia. No guarda nada."""
+    img, _ = alm.leer_imagen_validada(imagen, "foto")
+    referencia = None
+    if paciente_id is not None:
+        paciente = obtener_paciente_propio(db, usuario_actual, paciente_id)
+        referencia = _imagen_linea_base(db, paciente.id)
+    return evaluar_captura(img, referencia)

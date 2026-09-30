@@ -29,6 +29,7 @@ export default function RootLayout() {
       <Stack.Screen name="privacidad" options={{ title: 'Política de privacidad' }} />
       <Stack.Screen name="pacientes" options={{ title: 'Pacientes', headerBackVisible: false }} />
       <Stack.Screen name="procesamiento" options={{ title: 'Nuevo seguimiento' }} />
+      <Stack.Screen name="captura" options={{ title: 'Tomar foto con guía' }} />
       <Stack.Screen name="historial" options={{ title: 'Historial' }} />
       <Stack.Screen name="suscripcion" options={{ title: 'Suscripción' }} />
       <Stack.Screen name="cuenta" options={{ title: 'Mi cuenta' }} />

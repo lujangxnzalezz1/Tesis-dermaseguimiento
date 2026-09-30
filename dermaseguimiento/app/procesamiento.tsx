@@ -1,10 +1,11 @@
 import * as ImagePicker from 'expo-image-picker';
-import { router, useLocalSearchParams } from 'expo-router';
-import { useState } from 'react';
-import { Image, Text } from 'react-native';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { Image, Platform, Text } from 'react-native';
 import { avisar, elegirOrigenFoto } from '../lib/dialogo';
 import { Aviso, Boton, ImagenProtegida, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
-import { api, mensaje } from '../lib/api';
+import { api, fechaCorta, mensaje } from '../lib/api';
+import { tomarFotoPendiente } from '../lib/capturaStore';
 
 const MAX_MB = 10;
 type Imagen = { uri: string; nombre: string; tipo: string } | null;
@@ -20,6 +21,14 @@ function extraer(resultado: ImagePicker.ImagePickerResult): { imagen: Imagen; er
     return { imagen: null, error: `La foto pesa más de ${MAX_MB} MB. Sacala con menor resolución.` };
   }
   return { imagen: { uri: a.uri, nombre: a.fileName || a.uri.split('/').pop() || 'foto.jpg', tipo } };
+}
+
+async function adjuntar(fd: FormData, campo: string, img: NonNullable<Imagen>) {
+  if (Platform.OS === 'web') {
+    fd.append(campo, await (await fetch(img.uri)).blob(), img.nombre);
+  } else {
+    fd.append(campo, { uri: img.uri, name: img.nombre, type: img.tipo } as any);
+  }
 }
 
 async function elegir(origen: 'galeria' | 'camara') {
@@ -40,6 +49,23 @@ export default function ProcesamientoScreen() {
   const [error, setError] = useState<string | null>(null);
   const [sinPlan, setSinPlan] = useState(false);
   const [res, setRes] = useState<any>(null);
+  const [base, setBase] = useState<{ url: string; fecha: string } | null>(null);
+
+  // Si el paciente ya tiene consultas, la referencia es la foto de la primera (línea de base).
+  useEffect(() => {
+    api(`/pacientes/${pacienteId}/referencia`).then((r) => r.ok && r.data.existe && setBase({ url: r.data.url, fecha: r.data.fecha }));
+  }, [pacienteId]);
+
+  // Recoge la foto tomada con la cámara guiada al volver de esa pantalla.
+  useFocusEffect(useCallback(() => {
+    const p = tomarFotoPendiente();
+    if (!p) return;
+    setError(null);
+    (p.destino === 'referencia' ? setRef : setNueva)(p.foto);
+  }, []));
+
+  const conGuia = (destino: 'referencia' | 'nueva') =>
+    router.push({ pathname: '/captura', params: { pacienteId, destino } });
 
   const pedir = (poner: (i: Imagen) => void) =>
     elegirOrigenFoto(async (origen) => {
@@ -50,12 +76,13 @@ export default function ProcesamientoScreen() {
 
   const procesar = async () => {
     setError(null); setSinPlan(false);
-    if (!ref || !nueva) return setError('Seleccioná la imagen de referencia y la nueva captura antes de procesar.');
+    if (!nueva) return setError('Tomá o elegí la nueva captura antes de procesar.');
+    if (!ref && !base) return setError('Es la primera consulta: también necesitás una foto de referencia.');
     setProcesando(true); setRes(null);
     const fd = new FormData();
     fd.append('paciente_id', pacienteId);
-    fd.append('imagen_referencia', { uri: ref.uri, name: ref.nombre, type: ref.tipo } as any);
-    fd.append('imagen_nueva', { uri: nueva.uri, name: nueva.nombre, type: nueva.tipo } as any);
+    if (ref) await adjuntar(fd, 'imagen_referencia', ref);
+    await adjuntar(fd, 'imagen_nueva', nueva);
     const r = await api('/procesar-seguimiento', { method: 'POST', multipart: fd });
     setProcesando(false);
     if (!r.ok) {
@@ -74,11 +101,23 @@ export default function ProcesamientoScreen() {
       {sinPlan && <Boton texto="Ver planes y suscripción" icono="card-outline" onPress={() => router.push('/suscripcion')} />}
 
       <Subtitulo>Imagen de referencia</Subtitulo>
-      <Boton texto={ref ? 'Cambiar imagen' : 'Elegir imagen de referencia'} icono="image-outline" onPress={() => pedir(setRef)} />
-      {ref && <Image source={{ uri: ref.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} />}
+      {base && !ref ? (
+        <>
+          <Text style={{ color: '#444' }}>Se usa la foto de la primera consulta ({fechaCorta(base.fecha)}).</Text>
+          <ImagenProtegida url={base.url} />
+          <Boton texto="Usar otra foto de referencia" icono="swap-horizontal" variante="texto" onPress={() => pedir(setRef)} />
+        </>
+      ) : (
+        <>
+          <Boton texto={ref ? 'Cambiar referencia (cámara con guía)' : 'Tomar referencia con guía'} icono="scan-outline" onPress={() => conGuia('referencia')} />
+          <Boton texto="Elegir de la galería" icono="image-outline" variante="texto" onPress={() => pedir(setRef)} />
+          {ref && <Image source={{ uri: ref.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} resizeMode="contain" />}
+        </>
+      )}
       <Subtitulo>Nueva captura</Subtitulo>
-      <Boton texto={nueva ? 'Cambiar imagen' : 'Elegir nueva captura'} icono="camera-outline" onPress={() => pedir(setNueva)} />
-      {nueva && <Image source={{ uri: nueva.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} />}
+      <Boton texto={nueva ? 'Repetir con la cámara guiada' : 'Tomar foto con guía'} icono="scan-outline" onPress={() => conGuia('nueva')} />
+      <Boton texto="Elegir de la galería" icono="image-outline" variante="texto" onPress={() => pedir(setNueva)} />
+      {nueva && <Image source={{ uri: nueva.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} resizeMode="contain" />}
 
       <Boton texto="Procesar imágenes" icono="play-circle-outline" estilo={{ marginTop: 20 }} onPress={procesar} cargando={procesando} />
 
