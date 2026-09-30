@@ -239,3 +239,17 @@ export function ResumenOjeras({ s }: { s: any }) {
     </View>
   );
 }
+
+/** Resumen en lenguaje natural (lo primero que lee el dermatólogo). Los números quedan como detalle técnico. */
+export function Interpretacion({ s }: { s: any }) {
+  const i = s.interpretacion;
+  if (!i) return null;
+  return (
+    <View style={{ backgroundColor: '#fff', borderRadius: 8, padding: 12, marginTop: 8, borderLeftWidth: 4, borderLeftColor: COLOR.primario }}>
+      <Text style={{ fontSize: 16, fontWeight: '700', color: COLOR.primario, marginBottom: 6 }}>Qué cambió</Text>
+      {i.resumen.map((f: string) => <Text key={f} style={{ marginBottom: 4, lineHeight: 20 }}>• {f}</Text>)}
+      {i.advertencias.map((a: string) => <Aviso key={a} tipo="aviso" texto={a} />)}
+      <Text style={{ color: '#666', fontSize: 12, marginTop: 4 }}>{i.aclaracion}</Text>
+    </View>
+  );
+}

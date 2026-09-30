@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     ACNE_IOU_NMS: float = 0.5
     ACNE_IOU_MISMA_LESION: float = 0.1  # solapamiento mínimo para considerar que es la misma lesión
 
+    # --- Interpretación en lenguaje natural (umbrales de percepción del color, CIE76) ---
+    # 2,3 ≈ diferencia mínima perceptible (Sharma, 2003). No son umbrales clínicos validados.
+    INTERP_DELTA_E_PERCEPTIBLE: float = 2.3
+    INTERP_DELTA_E_MODERADO: float = 5.0
+    INTERP_DELTA_E_MARCADO: float = 10.0
+    INTERP_UMBRAL_COMPONENTE: float = 1.5   # cambio mínimo en L*, a* o b* para describir una dirección
+    INTERP_UMBRAL_OJERAS: float = 1.5       # cambio mínimo en el contraste de ojeras
+
     # --- Guía de captura (RF-03): umbrales del control de calidad de la foto ---
     CAPTURA_ANCHO_ROSTRO_MIN: float = 0.35   # ancho del rostro / ancho de la foto
     CAPTURA_ANCHO_ROSTRO_MAX: float = 0.80

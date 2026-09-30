@@ -3,7 +3,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, Text } from 'react-native';
 import { avisar, elegirOrigenFoto } from '../lib/dialogo';
-import { Aviso, Boton, ImagenProtegida, Pantalla, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { tomarFotoPendiente } from '../lib/capturaStore';
 
@@ -124,10 +124,12 @@ export default function ProcesamientoScreen() {
       {res && (
         <Tarjeta>
           <Subtitulo>Resultado</Subtitulo>
+          <Interpretacion s={res} />
+          <Subtitulo>Detalle técnico</Subtitulo>
           <Text>Puntos faciales: {res.landmarks_referencia} (referencia) / {res.landmarks_nueva} (nueva)</Text>
           <ImagenProtegida url={res.url_imagen_alineada} />
           <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
-          <Text>Delta E promedio: {res.delta_e_promedio.toFixed(2)}</Text>
+          <Text>Delta E promedio (CIE76): {res.delta_e_promedio.toFixed(2)} — cambio {res.interpretacion?.magnitud_color ?? ''}</Text>
           {res.tiempo_procesamiento_ms != null && <Text style={{ color: '#666' }}>Procesado en {(res.tiempo_procesamiento_ms / 1000).toFixed(1)} s</Text>}
           <ImagenProtegida url={res.url_mapa_calor} />
           <ResumenLesiones s={res} />

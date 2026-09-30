@@ -28,6 +28,7 @@ from services import deteccion_acne
 from services.analisis_colorimetrico import _calcular_mascara_rostro
 from services.similitud import ssim
 from services.periorbital import analizar_periorbital, dibujar_regiones
+from services.interpretacion import interpretar
 from services.procesamiento_imagenes import procesar_par_de_imagenes
 from services.suscripcion_service import exigir_acceso_avanzado
 
@@ -66,6 +67,7 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         ojeras_contraste_referencia=s.ojeras_contraste_referencia, ojeras_contraste_nueva=s.ojeras_contraste_nueva,
         ojeras_detalle=json.loads(s.ojeras_detalle) if s.ojeras_detalle else None,
         url_imagen_periorbital=f"/archivos/{s.ruta_imagen_periorbital}" if s.ruta_imagen_periorbital else None,
+        interpretacion=interpretar(s),
     )
 
 

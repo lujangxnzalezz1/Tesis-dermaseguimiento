@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
-import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 
 const TAM = 10;
@@ -43,10 +43,11 @@ export default function HistorialScreen() {
       {items.map((s) => (
         <Tarjeta key={s.id}>
           <Text style={{ fontWeight: '600', color: COLOR.primario }}>{fechaCorta(s.fecha)}</Text>
+          <Interpretacion s={s} />
           <ImagenProtegida url={s.url_imagen_alineada} />
           <Text style={{ marginTop: 8, color: '#444' }}>Puntos faciales: {s.landmarks_referencia} / {s.landmarks_nueva}</Text>
           <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
-          <Text>Delta E promedio: {s.delta_e_promedio.toFixed(2)}</Text>
+          <Text>Delta E promedio (CIE76): {s.delta_e_promedio.toFixed(2)} — cambio {s.interpretacion?.magnitud_color ?? ''}</Text>
           <ImagenProtegida url={s.url_mapa_calor} />
           <ResumenLesiones s={s} />
           <ResumenOjeras s={s} />

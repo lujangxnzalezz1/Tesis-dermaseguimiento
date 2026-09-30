@@ -36,3 +36,4 @@ class SeguimientoRespuesta(BaseModel):
     ojeras_contraste_nueva: Optional[float] = None
     ojeras_detalle: Optional[dict] = None
     url_imagen_periorbital: Optional[str] = None
+    interpretacion: Optional[dict] = None
