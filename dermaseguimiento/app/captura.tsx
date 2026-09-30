@@ -15,6 +15,22 @@ const OPACIDADES = [0, 0.35, 0.6];
 const ICONO = { ok: 'checkmark-circle', aviso: 'warning', error: 'close-circle' } as const;
 const COLOR_NIVEL = { ok: COLOR.ok, aviso: COLOR.aviso, error: COLOR.error };
 
+/** En web, expo-camera guarda espejada la foto de la cámara frontal (como la vista previa). Para el análisis
+ *  la foto tiene que estar en su orientación real: si no, se compararía la mejilla izquierda con la derecha. */
+async function desespejar(uri: string): Promise<string> {
+  const img = new window.Image();
+  img.src = uri;
+  await img.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = img.naturalWidth;
+  canvas.height = img.naturalHeight;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return uri;
+  ctx.setTransform(-1, 0, 0, 1, canvas.width, 0);
+  ctx.drawImage(img, 0, 0);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}
+
 /** Cámara con guía de captura (RF-03): óvalo para encuadrar, silueta semitransparente de la
  *  primera consulta y control de calidad automático antes de usar la foto. */
 export default function CapturaScreen() {
@@ -28,6 +44,7 @@ export default function CapturaScreen() {
   const [verificando, setVerificando] = useState(false);
   const [resultado, setResultado] = useState<Resultado | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lado, setLado] = useState<'back' | 'front'>('back');
 
   useEffect(() => {
     if (destino !== 'nueva' || !pacienteId) return;
@@ -39,8 +56,9 @@ export default function CapturaScreen() {
     try {
       const f = await camara.current?.takePictureAsync({ quality: 0.85 });
       if (!f?.uri) return setError('No se pudo tomar la foto. Intentá de nuevo.');
-      setFoto(f.uri);
-      verificar(f.uri);
+      const uri = Platform.OS === 'web' && lado === 'front' ? await desespejar(f.uri) : f.uri;
+      setFoto(uri);
+      verificar(uri);
     } catch {
       setError('La cámara no respondió. Cerrá esta pantalla y volvé a abrirla.');
     }
@@ -81,7 +99,10 @@ export default function CapturaScreen() {
 
   const camaraNativa = async () => {
     setError(null);
-    const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
+    const r = await ImagePicker.launchCameraAsync({
+      mediaTypes: ['images'], quality: 0.85,
+      cameraType: lado === 'front' ? ImagePicker.CameraType.front : ImagePicker.CameraType.back,
+    });
     if (r.canceled || !r.assets?.length) return;
     setFoto(r.assets[0].uri);
     verificar(r.assets[0].uri);
@@ -101,7 +122,9 @@ export default function CapturaScreen() {
           </>
         )}
         {error && <Aviso tipo="error" texto={error} />}
-        <Boton texto="Abrir la cámara del celular" icono="camera" estilo={{ marginTop: 16 }} onPress={camaraNativa} />
+        <Boton texto={lado === 'front' ? 'Cámara frontal (selfie) ✓' : 'Usar la cámara frontal (selfie)'} icono="camera-reverse-outline"
+          variante="secundario" estilo={{ marginTop: 16 }} onPress={() => setLado((l) => (l === 'back' ? 'front' : 'back'))} />
+        <Boton texto="Abrir la cámara del celular" icono="camera" estilo={{ marginTop: 8 }} onPress={camaraNativa} />
       </ScrollView>
     );
   }
@@ -159,10 +182,16 @@ export default function CapturaScreen() {
   // ---------------------------------------------------------------- cámara con guía
   return (
     <View style={{ flex: 1, backgroundColor: '#000' }}>
-      <CameraView ref={camara} style={StyleSheet.absoluteFill} facing="back" onCameraReady={() => setLista(true)} />
+      {/* mirror={false}: la foto guardada no sale espejada aunque la vista previa de la frontal sí lo esté */}
+      <CameraView key={lado} ref={camara} style={StyleSheet.absoluteFill} facing={lado} mirror={false}
+        onCameraReady={() => setLista(true)} />
       {referencia && opacidad > 0 && (
         <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-          <ImagenProtegida url={referencia} estilo={[StyleSheet.absoluteFill, { height: '100%', marginTop: 0, backgroundColor: 'transparent', opacity: OPACIDADES[opacidad] }]} />
+          <ImagenProtegida url={referencia} estilo={[StyleSheet.absoluteFill, {
+            height: '100%', marginTop: 0, backgroundColor: 'transparent', opacity: OPACIDADES[opacidad],
+            // la vista previa de la frontal es un espejo: la silueta se invierte para coincidir
+            transform: lado === 'front' ? [{ scaleX: -1 }] : [],
+          }]} />
         </View>
       )}
       <View pointerEvents="none" style={[StyleSheet.absoluteFill, e.centro]}>
@@ -182,6 +211,11 @@ export default function CapturaScreen() {
             <Text style={e.textoChico}>{opacidad === 0 ? 'Referencia: oculta' : `Referencia: ${Math.round(OPACIDADES[opacidad] * 100)} %`}</Text>
           </TouchableOpacity>
         )}
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cambiar de cámara"
+          onPress={() => { setLista(false); setLado((l) => (l === 'back' ? 'front' : 'back')); }} style={e.botonChico}>
+          <Ionicons name="camera-reverse-outline" size={20} color="#fff" />
+          <Text style={e.textoChico}>{lado === 'back' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}</Text>
+        </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Tomar foto" onPress={sacar} disabled={!lista} style={[e.disparador, !lista && { opacity: 0.5 }]}>
           <Ionicons name="camera" size={30} color={COLOR.primario} />
           <Text style={{ color: COLOR.primario, fontWeight: '700', fontSize: 12 }}>Tomar foto</Text>
