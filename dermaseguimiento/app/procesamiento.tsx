@@ -52,17 +52,23 @@ export default function ProcesamientoScreen() {
   const [base, setBase] = useState<{ url: string; fecha: string } | null>(null);
 
   // Si el paciente ya tiene consultas, la referencia es la foto de la primera (línea de base).
+  // Al cambiar de paciente se descarta todo lo del anterior (referencia, fotos, resultado).
   useEffect(() => {
-    api(`/pacientes/${pacienteId}/referencia`).then((r) => r.ok && r.data.existe && setBase({ url: r.data.url, fecha: r.data.fecha }));
+    setBase(null); setRef(null); setNueva(null); setRes(null); setError(null); setSinPlan(false);
+    let vigente = true;
+    api(`/pacientes/${pacienteId}/referencia`).then((r) => {
+      if (vigente && r.ok && r.data.existe) setBase({ url: r.data.url, fecha: r.data.fecha });
+    });
+    return () => { vigente = false; };
   }, [pacienteId]);
 
   // Recoge la foto tomada con la cámara guiada al volver de esa pantalla.
   useFocusEffect(useCallback(() => {
-    const p = tomarFotoPendiente();
+    const p = tomarFotoPendiente(String(pacienteId));
     if (!p) return;
     setError(null);
     (p.destino === 'referencia' ? setRef : setNueva)(p.foto);
-  }, []));
+  }, [pacienteId]));
 
   const conGuia = (destino: 'referencia' | 'nueva') =>
     router.push({ pathname: '/captura', params: { pacienteId, destino } });

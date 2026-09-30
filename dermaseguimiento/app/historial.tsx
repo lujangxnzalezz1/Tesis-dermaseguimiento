@@ -1,5 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
 import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
@@ -15,20 +15,30 @@ export default function HistorialScreen() {
   const [hasta, setHasta] = useState('');
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const pacienteActual = useRef(pacienteId);
+  pacienteActual.current = pacienteId;
 
   const cargar = useCallback(async (p: number) => {
     const re = /^\d{4}-\d{2}-\d{2}$/;
     if ((desde && !re.test(desde)) || (hasta && !re.test(hasta))) return setError('Las fechas deben tener el formato AAAA-MM-DD.');
     setError(null); setCargando(true);
     const qs = `pagina=${p}&tamano=${TAM}${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`;
-    const r = await api(`/pacientes/${pacienteId}/seguimientos?${qs}`);
+    const pedido = pacienteId;
+    const r = await api(`/pacientes/${pedido}/seguimientos?${qs}`);
+    if (pedido !== pacienteActual.current) return; // respuesta de un paciente anterior: se descarta
     setCargando(false);
     if (!r.ok) return setError(mensaje(r, 'No se pudo cargar el historial.'));
     setItems((prev) => (p === 1 ? r.data : [...prev, ...r.data]));
     setPagina(p);
   }, [pacienteId, desde, hasta]);
 
-  useEffect(() => { cargar(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Al cambiar de paciente se vacía la lista antes de cargar la del nuevo (nunca mostrar datos de otro paciente).
+  useEffect(() => {
+    setItems([]);
+    setDesde('');
+    setHasta('');
+    cargar(1);
+  }, [pacienteId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Pantalla>

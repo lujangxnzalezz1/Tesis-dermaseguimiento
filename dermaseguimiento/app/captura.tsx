@@ -47,8 +47,13 @@ export default function CapturaScreen() {
   const [lado, setLado] = useState<'back' | 'front'>('back');
 
   useEffect(() => {
+    setReferencia(null); // nunca mostrar la silueta de otro paciente
     if (destino !== 'nueva' || !pacienteId) return;
-    api(`/pacientes/${pacienteId}/referencia`).then((r) => r.ok && r.data.existe && setReferencia(r.data.url));
+    let vigente = true;
+    api(`/pacientes/${pacienteId}/referencia`).then((r) => {
+      if (vigente && r.ok && r.data.existe) setReferencia(r.data.url);
+    });
+    return () => { vigente = false; };
   }, [pacienteId, destino]);
 
   const sacar = async () => {
@@ -83,7 +88,7 @@ export default function CapturaScreen() {
 
   const usar = () => {
     if (!foto) return;
-    dejarFoto(destino, { uri: foto, nombre: 'captura.jpg', tipo: 'image/jpeg' });
+    dejarFoto(String(pacienteId), destino, { uri: foto, nombre: 'captura.jpg', tipo: 'image/jpeg' });
     router.back();
   };
 
