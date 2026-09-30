@@ -38,3 +38,6 @@ entrenamiento_yolo/datos/
 entrenamiento_yolo/runs/
 entrenamiento_yolo/*.pt
 entrenamiento_yolo/entrenamiento.log
+
+# ---------- HTTPS local (claves privadas: nunca subir) ----------
+https_local/certs/

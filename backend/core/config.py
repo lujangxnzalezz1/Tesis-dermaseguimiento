@@ -107,7 +107,8 @@ class Settings(BaseSettings):
     # Orígenes web permitidos (versión web de la app). Separados por coma.
     CORS_ORIGINS: str = "http://localhost:8081,http://127.0.0.1:8081"
     # Además se permite la app web servida desde cualquier IP de red privada (para abrirla desde el celular)
-    CORS_ORIGIN_REGEX: str = r"http://(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):8081"
+    CORS_ORIGIN_REGEX: str = (r"(http://(10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):8081"
+                              r"|https://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):8443)")
     EMISOR_NOMBRE: str = "DermaSeguimiento"
     EMISOR_RUC: str = ""
     EMISOR_EMAIL: str = "lujangxnzalezz1@gmail.com"

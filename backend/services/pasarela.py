@@ -63,7 +63,7 @@ def enviar_webhook(evento: dict) -> int:
     cuerpo = json.dumps(evento).encode()
     ts = str(int(time.time()))
     req = urllib.request.Request(
-        f"{url_base()}/webhooks/pago",
+        f"{settings.BASE_URL.rstrip('/')}/webhooks/pago",  # dirección interna: el servidor se avisa a sí mismo
         data=cuerpo,
         method="POST",
         headers={"Content-Type": "application/json", "X-Pasarela-Timestamp": ts, "X-Pasarela-Firma": firmar(cuerpo, ts)},

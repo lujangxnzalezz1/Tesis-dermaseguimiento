@@ -261,4 +261,7 @@ def verificar_captura(
     if paciente_id is not None:
         paciente = obtener_paciente_propio(db, usuario_actual, paciente_id)
         referencia = _imagen_linea_base(db, paciente.id)
-    return evaluar_captura(img, referencia)
+    resultado = evaluar_captura(img, referencia)
+    log.info("verificar-captura usuario=%s tamaño=%sx%s apta=%s problemas=%s", usuario_actual.id, img.shape[1], img.shape[0],
+             resultado["apta"], [f"{c['codigo']}:{c['nivel']}" for c in resultado["controles"] if c["nivel"] != "ok"])
+    return resultado

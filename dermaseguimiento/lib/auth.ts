@@ -17,9 +17,12 @@ const HOST_EMULADOR = Platform.select({
 
 // En la versión web el backend está en la misma computadora que sirve la página: se usa esa
 // dirección, así funciona en cualquier red (localhost en la Mac o la IP de la red desde el celular).
+// Por https (para la cámara en vivo del iPhone) la API está en el puerto 8444; por http, en 8000.
 const URL_WEB =
   Platform.OS === 'web' && typeof window !== 'undefined'
-    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    ? window.location.protocol === 'https:'
+      ? `https://${window.location.hostname}:8444`
+      : `http://${window.location.hostname}:8000`
     : null;
 
 export const API_URL: string =
