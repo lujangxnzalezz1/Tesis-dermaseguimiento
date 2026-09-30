@@ -1,5 +1,14 @@
-from models.usuario import Usuario
-from models.paciente import Paciente
+from models.usuario import Usuario, Sesion, TokenRestablecimiento
+from models.paciente import Paciente, ConsentimientoPaciente
 from models.seguimiento import Seguimiento
+from models.auditoria import Auditoria
+from models.suscripcion import (
+    Plan, Suscripcion, HistorialSuscripcion, Pago, Comprobante, Notificacion,
+)
+from models.configuracion import ConfiguracionCorreo, PlantillaCorreo, RespuestaSUS
 
-__all__ = ["Usuario", "Paciente", "Seguimiento"]
+__all__ = [
+    "Usuario", "Sesion", "TokenRestablecimiento", "Paciente", "ConsentimientoPaciente",
+    "Seguimiento", "Auditoria", "Plan", "Suscripcion", "HistorialSuscripcion", "Pago",
+    "Comprobante", "Notificacion", "ConfiguracionCorreo", "PlantillaCorreo", "RespuestaSUS",
+]

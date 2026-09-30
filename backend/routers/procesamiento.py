@@ -1,146 +1,162 @@
-import os
-from datetime import datetime
+import logging
+import time
+from datetime import date, datetime, timedelta
+from typing import Optional
 
-import cv2
-import numpy as np
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
+from fastapi.responses import FileResponse
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from core.config import RUTA_ALMACENAMIENTO
+from core.config import settings
 from core.database import get_db
 from core.security import obtener_usuario_actual
+from core.tiempo import ahora
 from models.paciente import Paciente
 from models.seguimiento import Seguimiento
 from models.usuario import Usuario
+from routers.pacientes import consentimiento_vigente, obtener_paciente_propio
 from schemas.seguimiento import SeguimientoRespuesta
+from services import almacenamiento as alm
+from services import auditoria_service as audit
 from services.analisis_colorimetrico import analizar_color
 from services.procesamiento_imagenes import procesar_par_de_imagenes
+from services.suscripcion_service import exigir_acceso_avanzado
 
 router = APIRouter(tags=["Procesamiento de imágenes"])
+log = logging.getLogger("procesamiento")
 
 
-def _leer_imagen_desde_upload(archivo: UploadFile) -> np.ndarray:
-    """Convierte un archivo subido (UploadFile) en una imagen que OpenCV
-    pueda procesar (formato BGR, el que usa OpenCV internamente)."""
-    contenido = archivo.file.read()
-    arreglo_bytes = np.frombuffer(contenido, np.uint8)
-    imagen = cv2.imdecode(arreglo_bytes, cv2.IMREAD_COLOR)
-    return imagen
-
-
-def _guardar_imagen(imagen: np.ndarray, ruta_absoluta: str) -> None:
-    os.makedirs(os.path.dirname(ruta_absoluta), exist_ok=True)
-    cv2.imwrite(ruta_absoluta, imagen)
-
-
-def _a_respuesta(seguimiento: Seguimiento) -> SeguimientoRespuesta:
+def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
     return SeguimientoRespuesta(
-        id=seguimiento.id,
-        paciente_id=seguimiento.paciente_id,
-        fecha=seguimiento.fecha,
-        landmarks_referencia=seguimiento.landmarks_referencia,
-        landmarks_nueva=seguimiento.landmarks_nueva,
-        url_imagen_referencia=f"/archivos/{seguimiento.ruta_imagen_referencia}",
-        url_imagen_nueva=f"/archivos/{seguimiento.ruta_imagen_nueva}",
-        url_imagen_alineada=f"/archivos/{seguimiento.ruta_imagen_alineada}",
-        delta_e_promedio=seguimiento.delta_e_promedio,
-        l_referencia=seguimiento.l_referencia,
-        a_referencia=seguimiento.a_referencia,
-        b_referencia=seguimiento.b_referencia,
-        l_nueva=seguimiento.l_nueva,
-        a_nueva=seguimiento.a_nueva,
-        b_nueva=seguimiento.b_nueva,
-        url_mapa_calor=f"/archivos/{seguimiento.ruta_mapa_calor}",
+        id=s.id, paciente_id=s.paciente_id, fecha=s.fecha,
+        landmarks_referencia=s.landmarks_referencia, landmarks_nueva=s.landmarks_nueva,
+        url_imagen_referencia=f"/archivos/{s.ruta_imagen_referencia}",
+        url_imagen_nueva=f"/archivos/{s.ruta_imagen_nueva}",
+        url_imagen_alineada=f"/archivos/{s.ruta_imagen_alineada}",
+        delta_e_promedio=s.delta_e_promedio,
+        l_referencia=s.l_referencia, a_referencia=s.a_referencia, b_referencia=s.b_referencia,
+        l_nueva=s.l_nueva, a_nueva=s.a_nueva, b_nueva=s.b_nueva,
+        url_mapa_calor=f"/archivos/{s.ruta_mapa_calor}",
+        tiempo_procesamiento_ms=s.tiempo_procesamiento_ms,
     )
 
 
-@router.post("/procesar-seguimiento", response_model=SeguimientoRespuesta)
+@router.post("/procesar-seguimiento", response_model=SeguimientoRespuesta, status_code=201)
 def procesar_seguimiento(
+    request: Request,
     paciente_id: int = Form(...),
     imagen_referencia: UploadFile = File(...),
     imagen_nueva: UploadFile = File(...),
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(obtener_usuario_actual),
 ):
-    """RF-09, RF-10, RF-11: recibe dos fotografías (la de referencia y la
-    nueva captura de seguimiento), detecta los puntos anatómicos faciales,
-    alinea geométricamente la nueva imagen con la de referencia, analiza
-    el cambio de color de piel en espacio CIE L*a*b* y guarda todo el
-    resultado en el historial del paciente."""
+    """RF-09, RF-10, RF-11, RF-12: alinea la nueva captura con la de referencia y analiza el cambio de
+    color de piel en CIE L*a*b*. Requiere suscripción con procesamiento, paciente propio y consentimiento."""
+    exigir_acceso_avanzado(db, usuario_actual)
+    paciente = obtener_paciente_propio(db, usuario_actual, paciente_id)
+    if not consentimiento_vigente(db, paciente.id):
+        raise HTTPException(
+            409,
+            "Este paciente no tiene un consentimiento informado vigente. Registralo desde su ficha antes de procesar nuevas fotos.",
+        )
 
-    paciente = db.query(Paciente).filter(Paciente.id == paciente_id).first()
-    if not paciente:
-        raise HTTPException(status_code=404, detail="Paciente no encontrado")
+    ref_bgr, hash_ref = alm.leer_imagen_validada(imagen_referencia, "imagen de referencia")
+    nueva_bgr, hash_nueva = alm.leer_imagen_validada(imagen_nueva, "nueva captura")
+    if hash_ref == hash_nueva:
+        raise HTTPException(400, "Elegiste la misma foto como referencia y como nueva captura. Seleccioná dos fotos distintas.")
 
-    ref_bgr = _leer_imagen_desde_upload(imagen_referencia)
-    nueva_bgr = _leer_imagen_desde_upload(imagen_nueva)
+    inicio = time.perf_counter()
+    try:
+        resultado = procesar_par_de_imagenes(ref_bgr, nueva_bgr)
+        if not resultado["exito"]:
+            audit.registrar_fallo(db, request, usuario_actual, "seguimientos", "procesar", resultado["error"],
+                                  entidad="paciente", entidad_id=paciente.id)
+            raise HTTPException(422, resultado["error"])
+        analisis = analizar_color(ref_bgr, resultado["imagen_alineada"], resultado["puntos_referencia"])
+        if not analisis["exito"]:
+            audit.registrar_fallo(db, request, usuario_actual, "seguimientos", "procesar", analisis["error"],
+                                  entidad="paciente", entidad_id=paciente.id)
+            raise HTTPException(422, analisis["error"])
+    except HTTPException:
+        raise
+    except Exception:
+        log.exception("Falló el procesamiento de imágenes")
+        raise HTTPException(500, "No pudimos procesar las fotos. Probá con otras imágenes; si sigue fallando, avisá al soporte.")
+    tiempo_ms = int((time.perf_counter() - inicio) * 1000)
 
-    if ref_bgr is None or nueva_bgr is None:
-        raise HTTPException(status_code=400, detail="No se pudo leer una de las imágenes enviadas.")
+    claves = {k: alm.nueva_clave() for k in ("ref", "nueva", "alineada", "mapa")}
+    try:
+        alm.guardar_imagen(ref_bgr, claves["ref"])
+        alm.guardar_imagen(nueva_bgr, claves["nueva"])
+        alm.guardar_imagen(resultado["imagen_alineada"], claves["alineada"])
+        alm.guardar_imagen(analisis["mapa_calor"], claves["mapa"])
+        seg = Seguimiento(
+            paciente_id=paciente.id, usuario_id=usuario_actual.id, fecha=ahora(),
+            ruta_imagen_referencia=claves["ref"], ruta_imagen_nueva=claves["nueva"],
+            ruta_imagen_alineada=claves["alineada"], ruta_mapa_calor=claves["mapa"],
+            landmarks_referencia=resultado["cantidad_landmarks_referencia"], landmarks_nueva=resultado["cantidad_landmarks_nueva"],
+            delta_e_promedio=analisis["delta_e_promedio"],
+            l_referencia=analisis["l_referencia"], a_referencia=analisis["a_referencia"], b_referencia=analisis["b_referencia"],
+            l_nueva=analisis["l_nueva"], a_nueva=analisis["a_nueva"], b_nueva=analisis["b_nueva"],
+            tiempo_procesamiento_ms=tiempo_ms,
+        )
+        db.add(seg)
+        db.commit()
+        db.refresh(seg)
+    except Exception:
+        # Nada queda a medias: se deshace la base y se borran las imágenes ya escritas (RNF-16)
+        db.rollback()
+        alm.borrar_silencioso(list(claves.values()))
+        log.exception("No se pudo guardar el seguimiento")
+        raise HTTPException(500, "No pudimos guardar el seguimiento y no se realizó ningún cambio. Intentá de nuevo.")
 
-    resultado = procesar_par_de_imagenes(ref_bgr, nueva_bgr)
-
-    if not resultado["exito"]:
-        raise HTTPException(status_code=422, detail=resultado["error"])
-
-    analisis_color = analizar_color(
-        ref_bgr, resultado["imagen_alineada"], resultado["puntos_referencia"]
-    )
-
-    if not analisis_color["exito"]:
-        raise HTTPException(status_code=422, detail=analisis_color["error"])
-
-    fecha = datetime.utcnow()
-    prefijo = fecha.strftime("%Y%m%d_%H%M%S_%f")
-    carpeta_relativa = os.path.join("seguimientos", str(paciente_id))
-
-    ruta_referencia = os.path.join(carpeta_relativa, f"{prefijo}_referencia.jpg")
-    ruta_nueva = os.path.join(carpeta_relativa, f"{prefijo}_nueva.jpg")
-    ruta_alineada = os.path.join(carpeta_relativa, f"{prefijo}_alineada.jpg")
-    ruta_mapa_calor = os.path.join(carpeta_relativa, f"{prefijo}_mapa_calor.jpg")
-
-    _guardar_imagen(ref_bgr, os.path.join(RUTA_ALMACENAMIENTO, ruta_referencia))
-    _guardar_imagen(nueva_bgr, os.path.join(RUTA_ALMACENAMIENTO, ruta_nueva))
-    _guardar_imagen(resultado["imagen_alineada"], os.path.join(RUTA_ALMACENAMIENTO, ruta_alineada))
-    _guardar_imagen(analisis_color["mapa_calor"], os.path.join(RUTA_ALMACENAMIENTO, ruta_mapa_calor))
-
-    nuevo_seguimiento = Seguimiento(
-        paciente_id=paciente_id,
-        usuario_id=usuario_actual.id,
-        fecha=fecha,
-        ruta_imagen_referencia=ruta_referencia,
-        ruta_imagen_nueva=ruta_nueva,
-        ruta_imagen_alineada=ruta_alineada,
-        landmarks_referencia=resultado["cantidad_landmarks_referencia"],
-        landmarks_nueva=resultado["cantidad_landmarks_nueva"],
-        ruta_mapa_calor=ruta_mapa_calor,
-        delta_e_promedio=analisis_color["delta_e_promedio"],
-        l_referencia=analisis_color["l_referencia"],
-        a_referencia=analisis_color["a_referencia"],
-        b_referencia=analisis_color["b_referencia"],
-        l_nueva=analisis_color["l_nueva"],
-        a_nueva=analisis_color["a_nueva"],
-        b_nueva=analisis_color["b_nueva"],
-    )
-    db.add(nuevo_seguimiento)
-    db.commit()
-    db.refresh(nuevo_seguimiento)
-
-    return _a_respuesta(nuevo_seguimiento)
+    excedido = tiempo_ms > settings.TIEMPO_MAXIMO_PROCESAMIENTO_SEGUNDOS * 1000
+    audit.registrar(db, request, usuario_actual, "seguimientos", "procesar", entidad="seguimiento", entidad_id=seg.id,
+                    despues={"paciente_id": paciente.id, "delta_e": round(seg.delta_e_promedio, 3), "tiempo_ms": tiempo_ms},
+                    detalle=f"Superó el máximo de {settings.TIEMPO_MAXIMO_PROCESAMIENTO_SEGUNDOS}s (RNF-06)" if excedido else None)
+    return _a_respuesta(seg)
 
 
 @router.get("/pacientes/{paciente_id}/seguimientos", response_model=list[SeguimientoRespuesta])
 def listar_seguimientos(
     paciente_id: int,
+    response: Response,
+    desde: Optional[date] = None,
+    hasta: Optional[date] = None,
+    pagina: int = Query(1, ge=1),
+    tamano: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
     usuario_actual: Usuario = Depends(obtener_usuario_actual),
 ):
-    """Historial de seguimientos de un paciente, del más reciente al más antiguo."""
-    seguimientos = (
-        db.query(Seguimiento)
-        .filter(Seguimiento.paciente_id == paciente_id)
-        .order_by(Seguimiento.fecha.desc())
-        .all()
-    )
+    """Historial de un paciente PROPIO, del más reciente al más antiguo, con filtro por fechas y paginación."""
+    paciente = obtener_paciente_propio(db, usuario_actual, paciente_id, incluir_inactivos=True)
+    q = db.query(Seguimiento).filter(Seguimiento.paciente_id == paciente.id)
+    if desde:
+        q = q.filter(Seguimiento.fecha >= datetime.combine(desde, datetime.min.time()))
+    if hasta:
+        q = q.filter(Seguimiento.fecha < datetime.combine(hasta, datetime.min.time()) + timedelta(days=1))
+    response.headers["X-Total-Count"] = str(q.count())
+    filas = q.order_by(Seguimiento.fecha.desc()).offset((pagina - 1) * tamano).limit(tamano).all()
+    return [_a_respuesta(s) for s in filas]
 
-    return [_a_respuesta(s) for s in seguimientos]
+
+@router.get("/archivos/{clave:path}")
+def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Las imágenes clínicas ya no son públicas: solo las ve el dermatólogo dueño del paciente."""
+    seg = (
+        db.query(Seguimiento)
+        .join(Paciente, Paciente.id == Seguimiento.paciente_id)
+        .filter(
+            Paciente.dermatologo_id == usuario_actual.id,
+            or_(
+                Seguimiento.ruta_imagen_referencia == clave, Seguimiento.ruta_imagen_nueva == clave,
+                Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
+            ),
+        )
+        .first()
+    )
+    if not seg:
+        raise HTTPException(404, "No encontramos esa imagen o no tenés permiso para verla.")
+    destino = alm.ruta_absoluta(clave)
+    return FileResponse(destino, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=300"})

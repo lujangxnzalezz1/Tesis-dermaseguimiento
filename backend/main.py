@@ -1,24 +1,38 @@
+import logging
 import os
 
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from fastapi import FastAPI, Request
 
-from core.config import RUTA_ALMACENAMIENTO
-from core.database import Base, engine
-from models import Usuario, Paciente, Seguimiento  # noqa: F401 - registran las tablas en Base.metadata
-from routers import auth, pacientes, procesamiento
+from core import errores
+from core.config import settings
+from routers import (
+    admin, auth, pacientes, pasarela_sandbox, privacidad, procesamiento, reportes, sus, suscripciones,
+)
 
-Base.metadata.create_all(bind=engine)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
-os.makedirs(RUTA_ALMACENAMIENTO, exist_ok=True)
+# El esquema de la base se gestiona con Alembic:  alembic upgrade head
+os.makedirs(settings.RUTA_ALMACENAMIENTO, exist_ok=True)
 
 app = FastAPI(title="DermaSeguimiento API")
+errores.instalar(app)
 
-app.include_router(auth.router)
-app.include_router(pacientes.router)
-app.include_router(procesamiento.router)
-app.mount("/archivos", StaticFiles(directory=RUTA_ALMACENAMIENTO), name="archivos")
+
+@app.middleware("http")
+async def cabeceras_de_seguridad(request: Request, call_next):
+    respuesta = await call_next(request)
+    respuesta.headers.setdefault("X-Content-Type-Options", "nosniff")
+    respuesta.headers.setdefault("X-Frame-Options", "DENY")
+    respuesta.headers.setdefault("Referrer-Policy", "no-referrer")
+    if request.url.path.startswith("/archivos/"):
+        respuesta.headers.setdefault("Cache-Control", "private, max-age=300")
+    elif "cache-control" not in respuesta.headers:
+        respuesta.headers["Cache-Control"] = "no-store"
+    return respuesta
+
+
+for r in (auth, privacidad, pacientes, procesamiento, reportes, suscripciones, pasarela_sandbox, admin, sus):
+    app.include_router(r.router)
 
 
 @app.get("/")
@@ -26,9 +40,7 @@ def read_root():
     return {"mensaje": "API de DermaSeguimiento funcionando correctamente"}
 
 
-@app.get("/test-db")
-def test_db_connection():
-    with engine.connect() as connection:
-        result = connection.execute(text("SELECT version();"))
-        version = result.fetchone()[0]
-    return {"conexion": "exitosa", "version_postgresql": version}
+@app.get("/salud")
+def salud():
+    """Chequeo de disponibilidad para el despliegue. No expone versiones ni datos internos."""
+    return {"estado": "ok"}

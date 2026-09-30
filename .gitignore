@@ -20,3 +20,13 @@ Thumbs.db
 # ---------- Variables de entorno / secretos ----------
 .env
 *.env.local
+
+# ---------- Pruebas y herramientas ----------
+.pytest_cache/
+backend/.pytest_cache/
+.claude/
+dermaseguimiento/.claude/
+dermaseguimiento/CLAUDE.md
+dermaseguimiento/AGENTS.md
+Tesis_respaldos/
+*.sql

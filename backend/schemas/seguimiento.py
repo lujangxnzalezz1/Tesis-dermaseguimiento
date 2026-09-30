@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 
 from pydantic import BaseModel
 
@@ -22,3 +23,4 @@ class SeguimientoRespuesta(BaseModel):
     a_nueva: float
     b_nueva: float
     url_mapa_calor: str
+    tiempo_procesamiento_ms: Optional[int] = None

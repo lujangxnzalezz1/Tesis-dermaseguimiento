@@ -1,125 +1,58 @@
-import { useCallback, useState } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  StyleSheet,
-  FlatList,
-  ActivityIndicator,
-  Alert,
-} from 'react-native';
-import { useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { API_URL, obtenerToken } from '../lib/auth';
+import { useLocalSearchParams } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Text } from 'react-native';
+import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { api, fechaCorta, mensaje } from '../lib/api';
 
-type Seguimiento = {
-  id: number;
-  fecha: string;
-  landmarks_referencia: number;
-  landmarks_nueva: number;
-  url_imagen_alineada: string;
-  url_mapa_calor: string;
-  delta_e_promedio: number;
-};
+const TAM = 10;
 
 export default function HistorialScreen() {
-  const { pacienteId, nombre, apellido } = useLocalSearchParams<{
-    pacienteId: string;
-    nombre: string;
-    apellido: string;
-  }>();
+  const { pacienteId, nombre, apellido } = useLocalSearchParams<{ pacienteId: string; nombre: string; apellido: string }>();
+  const [items, setItems] = useState<any[]>([]);
 
-  const [seguimientos, setSeguimientos] = useState<Seguimiento[]>([]);
+  const [pagina, setPagina] = useState(1);
+  const [desde, setDesde] = useState('');
+  const [hasta, setHasta] = useState('');
   const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const cargarHistorial = useCallback(async () => {
-    setCargando(true);
-    try {
-      const token = obtenerToken();
-      const response = await fetch(`${API_URL}/pacientes/${pacienteId}/seguimientos`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
+  const cargar = useCallback(async (p: number) => {
+    const re = /^\d{4}-\d{2}-\d{2}$/;
+    if ((desde && !re.test(desde)) || (hasta && !re.test(hasta))) return setError('Las fechas deben tener el formato AAAA-MM-DD.');
+    setError(null); setCargando(true);
+    const qs = `pagina=${p}&tamano=${TAM}${desde ? `&desde=${desde}` : ''}${hasta ? `&hasta=${hasta}` : ''}`;
+    const r = await api(`/pacientes/${pacienteId}/seguimientos?${qs}`);
+    setCargando(false);
+    if (!r.ok) return setError(mensaje(r, 'No se pudo cargar el historial.'));
+    setItems((prev) => (p === 1 ? r.data : [...prev, ...r.data]));
+    setPagina(p);
+  }, [pacienteId, desde, hasta]);
 
-      if (!response.ok) {
-        Alert.alert('Error', 'No se pudo cargar el historial.');
-        return;
-      }
-
-      setSeguimientos(data);
-    } catch (error) {
-      console.error(error);
-      Alert.alert('No se pudo conectar', 'Revisá que el backend esté corriendo y accesible.');
-    } finally {
-      setCargando(false);
-    }
-  }, [pacienteId]);
-
-  useFocusEffect(
-    useCallback(() => {
-      cargarHistorial();
-    }, [cargarHistorial])
-  );
-
-  if (cargando) {
-    return (
-      <View style={styles.centrado}>
-        <ActivityIndicator size="large" color="#1D3D47" />
-      </View>
-    );
-  }
+  useEffect(() => { cargar(1); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <FlatList
-      contentContainerStyle={styles.container}
-      data={seguimientos}
-      keyExtractor={(item) => String(item.id)}
-      ListHeaderComponent={
-        <>
-          <Text style={styles.title}>Historial de seguimiento</Text>
-          <Text style={styles.subtitle}>
-            Paciente: {nombre} {apellido}
-          </Text>
-        </>
-      }
-      ListEmptyComponent={
-        <Text style={styles.vacio}>Todavía no hay seguimientos registrados para este paciente.</Text>
-      }
-      renderItem={({ item }) => (
-        <View style={styles.tarjeta}>
-          <Text style={styles.fecha}>{new Date(item.fecha).toLocaleString()}</Text>
-          <Image source={{ uri: `${API_URL}${item.url_imagen_alineada}` }} style={styles.preview} />
-          <Text style={styles.detalle}>
-            Landmarks: {item.landmarks_referencia} (referencia) / {item.landmarks_nueva} (nueva)
-          </Text>
-
-          <Text style={styles.subtitulo}>Análisis colorimétrico (CIE L*a*b*)</Text>
-          <Text style={styles.detalle}>Delta E promedio: {item.delta_e_promedio.toFixed(2)}</Text>
-          <Image source={{ uri: `${API_URL}${item.url_mapa_calor}` }} style={styles.preview} />
-        </View>
+    <Pantalla>
+      <Titulo>Historial de seguimiento</Titulo>
+      <Text style={{ color: '#666', marginBottom: 12 }}>Paciente: {nombre} {apellido}</Text>
+      <Campo etiqueta="Desde (opcional)" value={desde} onChangeText={setDesde} placeholder="AAAA-MM-DD" maxLength={10} />
+      <Campo etiqueta="Hasta (opcional)" value={hasta} onChangeText={setHasta} placeholder="AAAA-MM-DD" maxLength={10} />
+      <Boton texto="Filtrar" icono="filter-outline" variante="secundario" onPress={() => cargar(1)} />
+      {error && <Aviso tipo="error" texto={error} />}
+      {cargando && <ActivityIndicator size="large" color={COLOR.primario} style={{ marginVertical: 16 }} />}
+      {!cargando && !error && items.length === 0 && <Text style={{ textAlign: 'center', color: '#666', marginTop: 24 }}>No hay seguimientos para mostrar.</Text>}
+      {items.map((s) => (
+        <Tarjeta key={s.id}>
+          <Text style={{ fontWeight: '600', color: COLOR.primario }}>{fechaCorta(s.fecha)}</Text>
+          <ImagenProtegida url={s.url_imagen_alineada} />
+          <Text style={{ marginTop: 8, color: '#444' }}>Puntos faciales: {s.landmarks_referencia} / {s.landmarks_nueva}</Text>
+          <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
+          <Text>Delta E promedio: {s.delta_e_promedio.toFixed(2)}</Text>
+          <ImagenProtegida url={s.url_mapa_calor} />
+        </Tarjeta>
+      ))}
+      {items.length > 0 && items.length % TAM === 0 && !cargando && (
+        <Boton texto="Cargar más" icono="chevron-down" variante="secundario" onPress={() => cargar(pagina + 1)} />
       )}
-    />
+    </Pantalla>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, backgroundColor: '#fff' },
-  centrado: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#1D3D47', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#666', marginBottom: 24 },
-  vacio: { fontSize: 15, color: '#666', textAlign: 'center', marginTop: 32 },
-  tarjeta: {
-    marginBottom: 20,
-    padding: 16,
-    backgroundColor: '#E6F4FE',
-    borderRadius: 8,
-  },
-  fecha: { fontSize: 14, fontWeight: '600', color: '#1D3D47', marginBottom: 8 },
-  subtitulo: { fontSize: 14, fontWeight: '600', color: '#1D3D47', marginTop: 16, marginBottom: 4 },
-  preview: {
-    width: '100%',
-    height: 220,
-    borderRadius: 8,
-    backgroundColor: '#eee',
-  },
-  detalle: { fontSize: 13, color: '#444', marginTop: 8 },
-});

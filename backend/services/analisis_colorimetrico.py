@@ -1,9 +1,11 @@
 import cv2
 import numpy as np
 
+from core.config import settings
+
 # Delta E (CIE76) por encima de este valor se considera un cambio de color
 # muy marcado; se usa solo para escalar el mapa de calor a un rango legible.
-DELTA_E_MAXIMO_VISUAL = 30.0
+DELTA_E_MAXIMO_VISUAL = settings.DELTA_E_MAXIMO_VISUAL
 
 
 def _convertir_a_lab_real(imagen_bgr: np.ndarray) -> np.ndarray:

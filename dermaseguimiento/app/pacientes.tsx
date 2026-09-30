@@ -1,248 +1,222 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
-import { router } from 'expo-router';
-import { API_URL, obtenerToken } from '../lib/auth';
+import { router, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
+import { Aviso, Boton, Campo, Casilla, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { api, cerrarSesion, mensaje } from '../lib/api';
 
-type PacienteEncontrado = {
-  id: number;
-  cedula: string;
-  nombre: string;
-  apellido: string;
-  telefono: string | null;
-} | null;
+type Paciente = {
+  id: number; cedula: string; nombre: string; apellido: string; telefono: string | null; tiene_consentimiento: boolean;
+};
 
-export default function PacientesScreen() {
-  const [cedula, setCedula] = useState('');
-  const [buscando, setBuscando] = useState(false);
-  const [yaSeBusco, setYaSeBusco] = useState(false);
-  const [pacienteEncontrado, setPacienteEncontrado] = useState<PacienteEncontrado>(null);
+const TEXTO_CONSENTIMIENTO =
+  'El paciente fue informado y autoriza que se registren fotografías clínicas de su rostro y se analice la evolución de su piel ' +
+  'únicamente con fines de seguimiento médico. Puede retirar este consentimiento cuando quiera.';
 
-  // Campos del formulario de registro (solo se muestran si el paciente no existe)
-  const [nombre, setNombre] = useState('');
-  const [apellido, setApellido] = useState('');
-  const [telefono, setTelefono] = useState('');
-  const [guardando, setGuardando] = useState(false);
-
-  const buscarPaciente = async () => {
-    if (!cedula) {
-      Alert.alert('Falta la cédula', 'Ingresá un número de cédula para buscar.');
-      return;
-    }
-
-    setBuscando(true);
-    setYaSeBusco(false);
-
-    try {
-      const token = obtenerToken();
-      const response = await fetch(`${API_URL}/pacientes/buscar/${cedula}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = await response.json();
-
-      if (data.existe) {
-        setPacienteEncontrado(data.paciente);
-      } else {
-        setPacienteEncontrado(null);
-      }
-      setYaSeBusco(true);
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'No se pudo conectar con el servidor.');
-    } finally {
-      setBuscando(false);
-    }
-  };
-
-  const registrarPaciente = async () => {
-    if (!nombre || !apellido) {
-      Alert.alert('Faltan datos', 'Nombre y apellido son obligatorios.');
-      return;
-    }
-
-    setGuardando(true);
-
-    try {
-      const token = obtenerToken();
-      const response = await fetch(`${API_URL}/pacientes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          cedula,
-          nombre,
-          apellido,
-          telefono: telefono || null,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Error', data.detail || 'No se pudo registrar el paciente.');
-        return;
-      }
-
-      Alert.alert('¡Listo!', 'Paciente registrado correctamente.');
-      setPacienteEncontrado(data);
-      setNombre('');
-      setApellido('');
-      setTelefono('');
-    } catch (error) {
-      console.error(error);
-      Alert.alert('Error', 'No se pudo conectar con el servidor.');
-    } finally {
-      setGuardando(false);
-    }
-  };
-
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Registro de Pacientes</Text>
-
-      <Text style={styles.label}>Número de cédula</Text>
-      <View style={styles.filaBusqueda}>
-        <TextInput
-          style={[styles.input, { flex: 1 }]}
-          placeholder="Ej: 5649752"
-          value={cedula}
-          onChangeText={setCedula}
-          keyboardType="numeric"
-        />
-        <TouchableOpacity style={styles.botonBuscar} onPress={buscarPaciente} disabled={buscando}>
-          {buscando ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Buscar</Text>}
-        </TouchableOpacity>
-      </View>
-
-      {yaSeBusco && pacienteEncontrado && (
-        <View style={styles.tarjetaEncontrado}>
-          <Text style={styles.tarjetaTitulo}>Paciente encontrado</Text>
-          <Text>Nombre: {pacienteEncontrado.nombre} {pacienteEncontrado.apellido}</Text>
-          <Text>Teléfono: {pacienteEncontrado.telefono || 'No registrado'}</Text>
-
-          <TouchableOpacity
-            style={styles.button}
-            onPress={() =>
-              router.push({
-                pathname: '/procesamiento',
-                params: {
-                  pacienteId: String(pacienteEncontrado.id),
-                  nombre: pacienteEncontrado.nombre,
-                  apellido: pacienteEncontrado.apellido,
-                },
-              })
-            }
-          >
-            <Text style={styles.buttonText}>Nuevo seguimiento</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.botonSecundario}
-            onPress={() =>
-              router.push({
-                pathname: '/historial',
-                params: {
-                  pacienteId: String(pacienteEncontrado.id),
-                  nombre: pacienteEncontrado.nombre,
-                  apellido: pacienteEncontrado.apellido,
-                },
-              })
-            }
-          >
-            <Text style={styles.botonSecundarioText}>Ver historial</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {yaSeBusco && !pacienteEncontrado && (
-        <View style={styles.formularioNuevo}>
-          <Text style={styles.tarjetaTitulo}>Paciente nuevo — completá los datos</Text>
-
-          <Text style={styles.label}>Nombre</Text>
-          <TextInput style={styles.input} value={nombre} onChangeText={setNombre} />
-
-          <Text style={styles.label}>Apellido</Text>
-          <TextInput style={styles.input} value={apellido} onChangeText={setApellido} />
-
-          <Text style={styles.label}>Teléfono (opcional)</Text>
-          <TextInput
-            style={styles.input}
-            value={telefono}
-            onChangeText={setTelefono}
-            keyboardType="phone-pad"
-          />
-
-          <TouchableOpacity style={styles.button} onPress={registrarPaciente} disabled={guardando}>
-            {guardando ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Registrar paciente</Text>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
-    </ScrollView>
-  );
+function fechaValida(txt: string): string | null {
+  if (!txt) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(txt)) return 'Usá el formato AAAA-MM-DD, por ejemplo 1990-05-24.';
+  const d = new Date(txt + 'T00:00:00');
+  if (isNaN(d.getTime()) || d.toISOString().slice(0, 10) !== txt) return 'Esa fecha no existe.';
+  if (d > new Date()) return 'La fecha de nacimiento no puede ser futura.';
+  if (d.getFullYear() < new Date().getFullYear() - 120) return 'La fecha de nacimiento no es válida.';
+  return null;
 }
 
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#1D3D47', marginBottom: 24 },
-  label: { fontSize: 14, color: '#444', marginBottom: 6, marginTop: 12 },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
-  },
-  filaBusqueda: { flexDirection: 'row', gap: 8, alignItems: 'stretch' },
-  botonBuscar: {
-    backgroundColor: '#1D3D47',
-    borderRadius: 8,
-    paddingHorizontal: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  button: {
-    backgroundColor: '#1D3D47',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  botonSecundario: {
-    borderWidth: 1,
-    borderColor: '#1D3D47',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 12,
-  },
-  botonSecundarioText: { color: '#1D3D47', fontSize: 16, fontWeight: '600' },
-  tarjetaEncontrado: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#E6F4FE',
-    borderRadius: 8,
-  },
-  formularioNuevo: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#f7f7f7',
-    borderRadius: 8,
-  },
-  tarjetaTitulo: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#1D3D47' },
-});
+export default function PacientesScreen() {
+  const [perfil, setPerfil] = useState<any>(null);
+  const [susc, setSusc] = useState<any>(null);
+  const [noLeidas, setNoLeidas] = useState(0);
+  const [avisos, setAvisos] = useState<string[]>([]);
+
+  const [q, setQ] = useState('');
+  const [items, setItems] = useState<Paciente[]>([]);
+  const [total, setTotal] = useState(0);
+  const [pagina, setPagina] = useState(1);
+  const [cargando, setCargando] = useState(false);
+  const [errorLista, setErrorLista] = useState<string | null>(null);
+
+  const [modo, setModo] = useState<'lista' | 'nuevo'>('lista');
+  const [f, setF] = useState({ cedula: '', nombre: '', apellido: '', fecha_nacimiento: '', sexo: '', telefono: '', antecedentes_medicos: '', observaciones: '' });
+  const [consiente, setConsiente] = useState(false);
+  const [errores, setErrores] = useState<Record<string, string>>({});
+  const [errorForm, setErrorForm] = useState<string | null>(null);
+  const [guardando, setGuardando] = useState(false);
+
+  const [bajaDe, setBajaDe] = useState<Paciente | null>(null);
+  const [consentDe, setConsentDe] = useState<Paciente | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
+
+  const cargarLista = useCallback(async (p = 1, texto = q) => {
+    setCargando(true);
+    setErrorLista(null);
+    const r = await api(`/pacientes?pagina=${p}&tamano=10${texto.trim() ? `&q=${encodeURIComponent(texto.trim())}` : ''}`);
+    setCargando(false);
+    if (!r.ok) return setErrorLista(mensaje(r));
+    setItems((prev) => (p === 1 ? r.data.items : [...prev, ...r.data.items]));
+    setTotal(r.data.total);
+    setPagina(p);
+  }, [q]);
+
+  useFocusEffect(
+    useCallback(() => {
+      (async () => {
+        const [pf, sc, nt] = await Promise.all([api('/perfil'), api('/suscripcion'), api('/notificaciones')]);
+        if (pf.ok) setPerfil(pf.data);
+        if (sc.ok) setSusc(sc.data);
+        if (nt.ok) {
+          setNoLeidas(nt.data.no_leidas);
+          setAvisos(nt.data.items.filter((n: any) => !n.leida && (n.tipo === 'vencimiento' || n.tipo === 'vencida')).map((n: any) => n.mensaje).slice(0, 1));
+        }
+      })();
+      cargarLista(1);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
+  );
+
+  const abrirNuevo = () => {
+    setF((x) => ({ ...x, cedula: /^\d+$/.test(q.trim()) ? q.trim() : x.cedula }));
+    setErrores({}); setErrorForm(null); setConsiente(false); setModo('nuevo');
+  };
+
+  const validar = () => {
+    const e: Record<string, string> = {};
+    const ced = f.cedula.replace(/[.\s]/g, '');
+    if (!/^\d{4,10}$/.test(ced)) e.cedula = 'La cédula debe tener solo números (entre 4 y 10 dígitos).';
+    if (!f.nombre.trim()) e.nombre = 'El nombre es obligatorio.';
+    if (!f.apellido.trim()) e.apellido = 'El apellido es obligatorio.';
+    if (/[<>]/.test(f.nombre + f.apellido + f.antecedentes_medicos + f.observaciones)) e.nombre = 'No se pueden usar los caracteres < o >.';
+    if (f.telefono && !/^\+?[0-9][0-9 \-]{5,18}$/.test(f.telefono.trim())) e.telefono = 'Usá solo números, espacios o guiones (ej.: 0981 123456).';
+    const fe = fechaValida(f.fecha_nacimiento.trim());
+    if (fe) e.fecha_nacimiento = fe;
+    if (f.antecedentes_medicos.length > 2000 || f.observaciones.length > 2000) e.observaciones = 'El texto es demasiado largo (máximo 2000 caracteres).';
+    return e;
+  };
+
+  const registrar = async () => {
+    setErrorForm(null);
+    const e = validar();
+    setErrores(e);
+    if (Object.keys(e).length) return setErrorForm('Revisá los campos marcados en rojo.');
+    if (!consiente) return setErrorForm('Necesitás el consentimiento informado del paciente: leelo con él y marcá la casilla.');
+    setGuardando(true);
+    const r = await api('/pacientes', {
+      method: 'POST',
+      json: {
+        cedula: f.cedula, nombre: f.nombre, apellido: f.apellido, fecha_nacimiento: f.fecha_nacimiento.trim() || null,
+        sexo: f.sexo || null, telefono: f.telefono.trim() || null, antecedentes_medicos: f.antecedentes_medicos || null,
+        observaciones: f.observaciones || null, consentimiento: { acepta: true },
+      },
+    });
+    setGuardando(false);
+    if (!r.ok) return setErrorForm(mensaje(r));
+    setInfo('Paciente registrado correctamente.');
+    setF({ cedula: '', nombre: '', apellido: '', fecha_nacimiento: '', sexo: '', telefono: '', antecedentes_medicos: '', observaciones: '' });
+    setModo('lista');
+    setQ(r.data.cedula);
+    cargarLista(1, r.data.cedula);
+  };
+
+  const darDeBaja = async (motivo: string) => {
+    const p = bajaDe!; setBajaDe(null);
+    const r = await api(`/pacientes/${p.id}`, { method: 'DELETE', json: { motivo, confirmar: true } });
+    setInfo(r.ok ? r.data.mensaje : null);
+    if (!r.ok) setErrorLista(mensaje(r)); else cargarLista(1);
+  };
+
+  const darConsentimiento = async () => {
+    const p = consentDe!; setConsentDe(null);
+    const r = await api(`/pacientes/${p.id}/consentimiento`, { method: 'POST' });
+    if (!r.ok) setErrorLista(mensaje(r)); else { setInfo('Consentimiento registrado.'); cargarLista(1); }
+  };
+
+  const set = (k: keyof typeof f) => (v: string) => setF((x) => ({ ...x, [k]: v }));
+  const vencida = susc && !susc.funciones_avanzadas;
+
+  return (
+    <Pantalla>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+        <Boton texto={noLeidas ? `Suscripción (${noLeidas})` : 'Suscripción'} icono="card-outline" variante="secundario" onPress={() => router.push('/suscripcion')} estilo={{ flexGrow: 1 }} />
+        <Boton texto="Mi cuenta" icono="person-circle-outline" variante="secundario" onPress={() => router.push('/cuenta')} estilo={{ flexGrow: 1 }} />
+        {perfil?.rol === 'admin' && <Boton texto="Administración" icono="settings-outline" variante="secundario" onPress={() => router.push('/admin')} estilo={{ flexGrow: 1 }} />}
+        <Boton texto="Cerrar sesión" icono="log-out-outline" variante="texto" onPress={cerrarSesion} estilo={{ flexGrow: 1 }} />
+      </View>
+      {perfil && <Text style={{ color: '#666', marginBottom: 4 }}>Hola, {perfil.nombre}</Text>}
+      {susc?.dias_restantes != null && susc.estado !== 'vencida' && susc.plan.periodicidad !== 'gratuito' && (
+        <Text style={{ color: '#444', marginBottom: 4 }}>
+          {susc.es_prueba ? 'Período de prueba' : `Plan ${susc.plan.nombre}`}: vence el {new Date(susc.fecha_vencimiento + 'Z').toLocaleDateString('es-PY')} ({susc.dias_restantes} días)
+        </Text>
+      )}
+      {avisos.map((a) => <Aviso key={a} tipo="aviso" texto={a} />)}
+      {vencida && <Aviso tipo="aviso" texto="Tu plan no incluye el procesamiento de imágenes. Podés seguir consultando a tus pacientes; para procesar fotos, renová o elegí un plan Premium." />}
+      {info && <Aviso tipo="ok" texto={info} />}
+
+      {modo === 'lista' ? (
+        <>
+          <Titulo>Pacientes</Titulo>
+          <Campo etiqueta="Buscar por cédula, nombre o apellido" value={q} onChangeText={setQ} onSubmitEditing={() => cargarLista(1)} returnKeyType="search" maxLength={80} />
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            <Boton texto="Buscar" icono="search" onPress={() => cargarLista(1)} estilo={{ flex: 1 }} cargando={cargando && pagina === 1} />
+            <Boton texto="Paciente nuevo" icono="person-add" variante="secundario" onPress={abrirNuevo} estilo={{ flex: 1 }} />
+          </View>
+          {errorLista && <Aviso tipo="error" texto={errorLista} />}
+          {!cargando && !errorLista && items.length === 0 && (
+            <Tarjeta><Text>No encontramos pacientes con esos datos. Podés registrarlo con «Paciente nuevo».</Text></Tarjeta>
+          )}
+          {items.map((p) => (
+            <Tarjeta key={p.id}>
+              <Text style={{ fontSize: 17, fontWeight: '600', color: COLOR.primario }}>{p.nombre} {p.apellido}</Text>
+              <Text>Cédula: {p.cedula}</Text>
+              <Text>Teléfono: {p.telefono || 'No registrado'}</Text>
+              {!p.tiene_consentimiento && <Aviso tipo="aviso" texto="Sin consentimiento informado vigente: no se pueden procesar fotos nuevas." />}
+              {p.tiene_consentimiento ? (
+                <Boton texto="Nuevo seguimiento" icono="camera-outline" estilo={{ marginTop: 10 }}
+                  onPress={() => router.push({ pathname: '/procesamiento', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })} />
+              ) : (
+                <Boton texto="Registrar consentimiento" icono="document-text-outline" estilo={{ marginTop: 10 }} onPress={() => setConsentDe(p)} />
+              )}
+              <Boton texto="Ver historial" icono="time-outline" variante="secundario" estilo={{ marginTop: 8 }}
+                onPress={() => router.push({ pathname: '/historial', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })} />
+              <Boton texto="Dar de baja" icono="trash-outline" variante="texto" onPress={() => setBajaDe(p)} />
+            </Tarjeta>
+          ))}
+          {cargando && pagina > 1 && <ActivityIndicator color={COLOR.primario} />}
+          {items.length < total && (
+            <Boton texto={`Cargar más (${items.length} de ${total})`} icono="chevron-down" variante="secundario" onPress={() => cargarLista(pagina + 1)} />
+          )}
+        </>
+      ) : (
+        <>
+          <Titulo>Paciente nuevo</Titulo>
+          {errorForm && <Aviso tipo="error" texto={errorForm} />}
+          <Campo etiqueta="Cédula" value={f.cedula} onChangeText={set('cedula')} keyboardType="numeric" error={errores.cedula} maxLength={12} />
+          <Campo etiqueta="Nombre" value={f.nombre} onChangeText={set('nombre')} error={errores.nombre} maxLength={80} />
+          <Campo etiqueta="Apellido" value={f.apellido} onChangeText={set('apellido')} error={errores.apellido} maxLength={80} />
+          <Campo etiqueta="Fecha de nacimiento (opcional)" value={f.fecha_nacimiento} onChangeText={set('fecha_nacimiento')} placeholder="AAAA-MM-DD" error={errores.fecha_nacimiento} maxLength={10} keyboardType="numbers-and-punctuation" />
+          <Text style={{ fontSize: 14, color: '#444', marginBottom: 6 }}>Sexo (opcional)</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            {[['F', 'Femenino'], ['M', 'Masculino'], ['O', 'Otro']].map(([v, t]) => (
+              <TouchableOpacity key={v} onPress={() => set('sexo')(f.sexo === v ? '' : v)} accessibilityRole="button" accessibilityLabel={t}
+                style={{ flex: 1, padding: 10, borderRadius: 8, borderWidth: 1, borderColor: COLOR.primario, alignItems: 'center', backgroundColor: f.sexo === v ? COLOR.primario : '#fff' }}>
+                <Text style={{ color: f.sexo === v ? '#fff' : COLOR.primario }}>{t}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Campo etiqueta="Teléfono (opcional)" value={f.telefono} onChangeText={set('telefono')} keyboardType="phone-pad" error={errores.telefono} maxLength={20} />
+          <Campo etiqueta="Antecedentes médicos (opcional)" value={f.antecedentes_medicos} onChangeText={set('antecedentes_medicos')} multiline maxLength={2000} />
+          <Campo etiqueta="Observaciones (opcional)" value={f.observaciones} onChangeText={set('observaciones')} multiline maxLength={2000} error={errores.observaciones} />
+          <Subtitulo>Consentimiento informado</Subtitulo>
+          <Casilla marcada={consiente} onCambio={setConsiente}><Text>{TEXTO_CONSENTIMIENTO}</Text></Casilla>
+          <Text style={{ color: COLOR.primario, textDecorationLine: 'underline', marginBottom: 12 }} onPress={() => router.push('/privacidad')}>Ver la Política de Privacidad</Text>
+          <Boton texto="Registrar paciente" icono="save-outline" onPress={registrar} cargando={guardando} />
+          <Boton texto="Cancelar" icono="close" variante="secundario" estilo={{ marginTop: 8 }} onPress={() => setModo('lista')} />
+        </>
+      )}
+
+      <Confirmar visible={!!bajaDe} peligro pedirMotivo motivoObligatorio titulo="¿Dar de baja al paciente?"
+        mensaje={`${bajaDe?.nombre ?? ''} ${bajaDe?.apellido ?? ''} dejará de aparecer en tus listas. Su historial se conserva y no se borra.`}
+        textoConfirmar="Sí, dar de baja" onConfirmar={darDeBaja} onCancelar={() => setBajaDe(null)} />
+      <Confirmar visible={!!consentDe} titulo="Registrar consentimiento" mensaje={TEXTO_CONSENTIMIENTO + ' ¿El paciente lo aceptó?'}
+        textoConfirmar="Sí, lo aceptó" onConfirmar={darConsentimiento} onCancelar={() => setConsentDe(null)} />
+    </Pantalla>
+  );
+}

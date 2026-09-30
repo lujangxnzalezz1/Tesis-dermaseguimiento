@@ -1,237 +1,97 @@
-import { useState } from 'react';
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Alert,
-  ActivityIndicator,
-} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams } from 'expo-router';
-import { API_URL, obtenerToken } from '../lib/auth';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
+import { Alert, Image, Text } from 'react-native';
+import { Aviso, Boton, ImagenProtegida, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { api, mensaje } from '../lib/api';
 
-type ImagenSeleccionada = {
-  uri: string;
-  nombre: string;
-  tipo: string;
-} | null;
+const MAX_MB = 10;
+type Imagen = { uri: string; nombre: string; tipo: string } | null;
 
-function extraerImagenSeleccionada(
-  resultado: ImagePicker.ImagePickerResult
-): ImagenSeleccionada {
-  if (resultado.canceled || !resultado.assets?.length) {
-    return null;
+function extraer(resultado: ImagePicker.ImagePickerResult): { imagen: Imagen; error?: string } {
+  if (resultado.canceled || !resultado.assets?.length) return { imagen: null };
+  const a = resultado.assets[0];
+  const tipo = (a.mimeType || 'image/jpeg').toLowerCase();
+  if (!['image/jpeg', 'image/jpg', 'image/png', 'image/webp'].includes(tipo)) {
+    return { imagen: null, error: 'Ese formato no está permitido. Usá una foto JPG, PNG o WEBP.' };
   }
-
-  const asset = resultado.assets[0];
-  const nombre = asset.fileName || asset.uri.split('/').pop() || 'foto.jpg';
-  const tipo = asset.mimeType || 'image/jpeg';
-
-  return { uri: asset.uri, nombre, tipo };
+  if (a.fileSize && a.fileSize > MAX_MB * 1024 * 1024) {
+    return { imagen: null, error: `La foto pesa más de ${MAX_MB} MB. Sacala con menor resolución.` };
+  }
+  return { imagen: { uri: a.uri, nombre: a.fileName || a.uri.split('/').pop() || 'foto.jpg', tipo } };
 }
 
-async function elegirDeGaleria(): Promise<ImagenSeleccionada> {
-  const permiso = await ImagePicker.requestMediaLibraryPermissionsAsync();
+async function elegir(origen: 'galeria' | 'camara') {
+  const permiso = origen === 'galeria' ? await ImagePicker.requestMediaLibraryPermissionsAsync() : await ImagePicker.requestCameraPermissionsAsync();
   if (!permiso.granted) {
-    Alert.alert('Permiso necesario', 'Necesitamos acceso a tus fotos para continuar.');
-    return null;
+    Alert.alert('Permiso necesario', origen === 'galeria' ? 'Necesitamos acceso a tus fotos para continuar.' : 'Necesitamos acceso a la cámara para continuar.');
+    return { imagen: null };
   }
-
-  const resultado = await ImagePicker.launchImageLibraryAsync({
-    mediaTypes: ['images'],
-    quality: 0.8,
-  });
-
-  return extraerImagenSeleccionada(resultado);
-}
-
-async function tomarFoto(): Promise<ImagenSeleccionada> {
-  const permiso = await ImagePicker.requestCameraPermissionsAsync();
-  if (!permiso.granted) {
-    Alert.alert('Permiso necesario', 'Necesitamos acceso a la cámara para continuar.');
-    return null;
-  }
-
-  const resultado = await ImagePicker.launchCameraAsync({
-    mediaTypes: ['images'],
-    quality: 0.8,
-  });
-
-  return extraerImagenSeleccionada(resultado);
-}
-
-function elegirOrigenImagen(
-  onElegido: (imagen: ImagenSeleccionada) => void
-) {
-  Alert.alert('Seleccionar imagen', '¿De dónde querés obtener la foto?', [
-    { text: 'Cancelar', style: 'cancel' },
-    { text: 'Galería', onPress: async () => onElegido(await elegirDeGaleria()) },
-    { text: 'Cámara', onPress: async () => onElegido(await tomarFoto()) },
-  ]);
+  const opciones: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.8 };
+  return extraer(origen === 'galeria' ? await ImagePicker.launchImageLibraryAsync(opciones) : await ImagePicker.launchCameraAsync(opciones));
 }
 
 export default function ProcesamientoScreen() {
-  const { pacienteId, nombre, apellido } = useLocalSearchParams<{
-    pacienteId: string;
-    nombre: string;
-    apellido: string;
-  }>();
-
-  const [imagenReferencia, setImagenReferencia] = useState<ImagenSeleccionada>(null);
-  const [imagenNueva, setImagenNueva] = useState<ImagenSeleccionada>(null);
+  const { pacienteId, nombre, apellido } = useLocalSearchParams<{ pacienteId: string; nombre: string; apellido: string }>();
+  const [ref, setRef] = useState<Imagen>(null);
+  const [nueva, setNueva] = useState<Imagen>(null);
   const [procesando, setProcesando] = useState(false);
-  const [resultado, setResultado] = useState<{
-    landmarksReferencia: number;
-    landmarksNueva: number;
-    urlImagenAlineada: string;
-    urlMapaCalor: string;
-    deltaEPromedio: number;
-  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [sinPlan, setSinPlan] = useState(false);
+  const [res, setRes] = useState<any>(null);
 
-  const procesarImagenes = async () => {
-    if (!imagenReferencia || !imagenNueva) {
-      Alert.alert('Faltan imágenes', 'Seleccioná la imagen de referencia y la nueva captura.');
-      return;
+  const pedir = (poner: (i: Imagen) => void) =>
+    Alert.alert('Seleccionar imagen', '¿De dónde querés obtener la foto?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Galería', onPress: async () => { const r = await elegir('galeria'); if (r.error) setError(r.error); else if (r.imagen) { setError(null); poner(r.imagen); } } },
+      { text: 'Cámara', onPress: async () => { const r = await elegir('camara'); if (r.error) setError(r.error); else if (r.imagen) { setError(null); poner(r.imagen); } } },
+    ]);
+
+  const procesar = async () => {
+    setError(null); setSinPlan(false);
+    if (!ref || !nueva) return setError('Seleccioná la imagen de referencia y la nueva captura antes de procesar.');
+    setProcesando(true); setRes(null);
+    const fd = new FormData();
+    fd.append('paciente_id', pacienteId);
+    fd.append('imagen_referencia', { uri: ref.uri, name: ref.nombre, type: ref.tipo } as any);
+    fd.append('imagen_nueva', { uri: nueva.uri, name: nueva.nombre, type: nueva.tipo } as any);
+    const r = await api('/procesar-seguimiento', { method: 'POST', multipart: fd });
+    setProcesando(false);
+    if (!r.ok) {
+      setSinPlan(r.status === 402);
+      return setError(mensaje(r, 'No se pudo procesar. Intentá de nuevo.'));
     }
-
-    setProcesando(true);
-    setResultado(null);
-
-    try {
-      const token = obtenerToken();
-      const formData = new FormData();
-      formData.append('paciente_id', pacienteId);
-      formData.append('imagen_referencia', {
-        uri: imagenReferencia.uri,
-        name: imagenReferencia.nombre,
-        type: imagenReferencia.tipo,
-      } as any);
-      formData.append('imagen_nueva', {
-        uri: imagenNueva.uri,
-        name: imagenNueva.nombre,
-        type: imagenNueva.tipo,
-      } as any);
-
-      const response = await fetch(`${API_URL}/procesar-seguimiento`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data',
-        },
-        body: formData,
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        Alert.alert('Error al procesar', data.detail || 'Intentá de nuevo.');
-        return;
-      }
-
-      setResultado({
-        landmarksReferencia: data.landmarks_referencia,
-        landmarksNueva: data.landmarks_nueva,
-        urlImagenAlineada: `${API_URL}${data.url_imagen_alineada}`,
-        urlMapaCalor: `${API_URL}${data.url_mapa_calor}`,
-        deltaEPromedio: data.delta_e_promedio,
-      });
-    } catch (error) {
-      console.error(error);
-      Alert.alert('No se pudo conectar', 'Revisá que el backend esté corriendo y accesible.');
-    } finally {
-      setProcesando(false);
-    }
+    setRes(r.data);
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Nuevo seguimiento</Text>
-      <Text style={styles.subtitle}>
-        Paciente: {nombre} {apellido}
-      </Text>
+    <Pantalla>
+      <Titulo>Nuevo seguimiento</Titulo>
+      <Text style={{ color: '#666', marginBottom: 12 }}>Paciente: {nombre} {apellido}</Text>
+      <Aviso tipo="info" texto="Los resultados son informativos y de apoyo a la documentación clínica. La interpretación clínica corresponde exclusivamente al profesional médico habilitado." />
+      {error && <Aviso tipo="error" texto={error} />}
+      {sinPlan && <Boton texto="Ver planes y suscripción" icono="card-outline" onPress={() => router.push('/suscripcion')} />}
 
-      <Text style={styles.label}>Imagen de referencia</Text>
-      <TouchableOpacity
-        style={styles.botonImagen}
-        onPress={() => elegirOrigenImagen(setImagenReferencia)}
-      >
-        <Text style={styles.buttonText}>
-          {imagenReferencia ? 'Cambiar imagen' : 'Elegir imagen de referencia'}
-        </Text>
-      </TouchableOpacity>
-      {imagenReferencia && (
-        <Image source={{ uri: imagenReferencia.uri }} style={styles.preview} />
+      <Subtitulo>Imagen de referencia</Subtitulo>
+      <Boton texto={ref ? 'Cambiar imagen' : 'Elegir imagen de referencia'} icono="image-outline" onPress={() => pedir(setRef)} />
+      {ref && <Image source={{ uri: ref.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} />}
+      <Subtitulo>Nueva captura</Subtitulo>
+      <Boton texto={nueva ? 'Cambiar imagen' : 'Elegir nueva captura'} icono="camera-outline" onPress={() => pedir(setNueva)} />
+      {nueva && <Image source={{ uri: nueva.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} />}
+
+      <Boton texto="Procesar imágenes" icono="play-circle-outline" estilo={{ marginTop: 20 }} onPress={procesar} cargando={procesando} />
+
+      {res && (
+        <Tarjeta>
+          <Subtitulo>Resultado</Subtitulo>
+          <Text>Puntos faciales: {res.landmarks_referencia} (referencia) / {res.landmarks_nueva} (nueva)</Text>
+          <ImagenProtegida url={res.url_imagen_alineada} />
+          <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
+          <Text>Delta E promedio: {res.delta_e_promedio.toFixed(2)}</Text>
+          {res.tiempo_procesamiento_ms != null && <Text style={{ color: '#666' }}>Procesado en {(res.tiempo_procesamiento_ms / 1000).toFixed(1)} s</Text>}
+          <ImagenProtegida url={res.url_mapa_calor} />
+        </Tarjeta>
       )}
-
-      <Text style={styles.label}>Nueva captura</Text>
-      <TouchableOpacity
-        style={styles.botonImagen}
-        onPress={() => elegirOrigenImagen(setImagenNueva)}
-      >
-        <Text style={styles.buttonText}>
-          {imagenNueva ? 'Cambiar imagen' : 'Elegir nueva captura'}
-        </Text>
-      </TouchableOpacity>
-      {imagenNueva && <Image source={{ uri: imagenNueva.uri }} style={styles.preview} />}
-
-      <TouchableOpacity style={styles.button} onPress={procesarImagenes} disabled={procesando}>
-        {procesando ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.buttonText}>Procesar imágenes</Text>
-        )}
-      </TouchableOpacity>
-
-      {resultado && (
-        <View style={styles.tarjetaResultado}>
-          <Text style={styles.tarjetaTitulo}>Resultado</Text>
-          <Text>Landmarks referencia: {resultado.landmarksReferencia}</Text>
-          <Text>Landmarks nueva: {resultado.landmarksNueva}</Text>
-          <Image source={{ uri: resultado.urlImagenAlineada }} style={styles.preview} />
-
-          <Text style={styles.tarjetaTitulo}>Análisis colorimétrico (CIE L*a*b*)</Text>
-          <Text>Delta E promedio: {resultado.deltaEPromedio.toFixed(2)}</Text>
-          <Image source={{ uri: resultado.urlMapaCalor }} style={styles.preview} />
-        </View>
-      )}
-    </ScrollView>
+    </Pantalla>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 24, backgroundColor: '#fff' },
-  title: { fontSize: 24, fontWeight: 'bold', color: '#1D3D47', marginBottom: 4 },
-  subtitle: { fontSize: 16, color: '#666', marginBottom: 24 },
-  label: { fontSize: 14, color: '#444', marginBottom: 6, marginTop: 16 },
-  botonImagen: {
-    backgroundColor: '#1D3D47',
-    borderRadius: 8,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  button: {
-    backgroundColor: '#1D3D47',
-    borderRadius: 8,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  preview: {
-    width: '100%',
-    height: 220,
-    borderRadius: 8,
-    marginTop: 12,
-    backgroundColor: '#eee',
-  },
-  tarjetaResultado: {
-    marginTop: 24,
-    padding: 16,
-    backgroundColor: '#E6F4FE',
-    borderRadius: 8,
-  },
-  tarjetaTitulo: { fontSize: 16, fontWeight: '600', marginBottom: 8, color: '#1D3D47' },
-});

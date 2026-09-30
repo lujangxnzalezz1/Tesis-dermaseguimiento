@@ -1,36 +1,57 @@
 import { Platform } from 'react-native';
+import * as SecureStore from 'expo-secure-store';
 
-// Guarda el token de sesión mientras la app está abierta.
-// Es una solución simple para empezar: si cerrás la app, se pierde
-// y hay que loguearse de nuevo. Más adelante lo hacemos persistente
-// con AsyncStorage o SecureStore.
-
-// Para probar en un dispositivo físico por WiFi, poné la IP local
-// de la Mac (ej: 'http://192.168.100.72:8000'). Para simulador/emulador
-// en la misma Mac (sin red/internet), dejá null: cada plataforma resuelve
-// su propia forma de llegar a "localhost" del host.
+// Dirección del backend. Orden de prioridad:
+//   1) EXPO_PUBLIC_API_URL (archivo .env de la app), p. ej. http://192.168.1.20:8000
+//   2) IP_DISPOSITIVO_FISICO, para probar en un celular real por WiFi
+//   3) localhost / 10.0.2.2 para simulador o emulador en la misma computadora
+// En producción debe ser una URL https:// (RNF-04).
 const IP_DISPOSITIVO_FISICO: string | null = null;
 
 const HOST_EMULADOR = Platform.select({
-  ios: 'localhost', // el simulador de iOS comparte la red del Mac
-  android: '10.0.2.2', // alias que usa el emulador de Android para el host
+  ios: 'localhost',
+  android: '10.0.2.2',
   default: 'localhost',
 });
 
-export const API_URL = IP_DISPOSITIVO_FISICO
-  ? `http://${IP_DISPOSITIVO_FISICO}:8000`
-  : `http://${HOST_EMULADOR}:8000`;
+export const API_URL: string =
+  process.env.EXPO_PUBLIC_API_URL ??
+  (IP_DISPOSITIVO_FISICO ? `http://${IP_DISPOSITIVO_FISICO}:8000` : `http://${HOST_EMULADOR}:8000`);
 
+// El token se guarda cifrado en el llavero del sistema (SecureStore) para que la sesión
+// sobreviva al cierre de la app. En web (sin SecureStore) queda solo en memoria.
+const CLAVE_TOKEN = 'derma_token';
 let tokenActual: string | null = null;
 
-export function guardarToken(token: string) {
+export async function cargarToken(): Promise<string | null> {
+  try {
+    if (Platform.OS !== 'web') {
+      tokenActual = await SecureStore.getItemAsync(CLAVE_TOKEN);
+    }
+  } catch {
+    tokenActual = null;
+  }
+  return tokenActual;
+}
+
+export async function guardarToken(token: string) {
   tokenActual = token;
+  try {
+    if (Platform.OS !== 'web') await SecureStore.setItemAsync(CLAVE_TOKEN, token);
+  } catch {
+    /* si el llavero falla, la sesión queda solo en memoria */
+  }
 }
 
 export function obtenerToken(): string | null {
   return tokenActual;
 }
 
-export function cerrarSesion() {
+export async function borrarToken() {
   tokenActual = null;
+  try {
+    if (Platform.OS !== 'web') await SecureStore.deleteItemAsync(CLAVE_TOKEN);
+  } catch {
+    /* nada que hacer */
+  }
 }
