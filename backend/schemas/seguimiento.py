@@ -32,3 +32,7 @@ class SeguimientoRespuesta(BaseModel):
     lesiones_persistentes: Optional[int] = None
     lesiones_resueltas: Optional[int] = None
     url_imagen_lesiones: Optional[str] = None
+    ojeras_contraste_referencia: Optional[float] = None
+    ojeras_contraste_nueva: Optional[float] = None
+    ojeras_detalle: Optional[dict] = None
+    url_imagen_periorbital: Optional[str] = None

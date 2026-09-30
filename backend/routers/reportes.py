@@ -36,7 +36,8 @@ def reporte_evolucion(
     filas = _consulta(db, pac.id, desde, hasta)
     serie = [
         {"seguimiento_id": s.id, "fecha": s.fecha.isoformat(), "delta_e_promedio": round(s.delta_e_promedio, 3),
-         "l": round(s.l_nueva, 3), "a": round(s.a_nueva, 3), "b": round(s.b_nueva, 3)}
+         "l": round(s.l_nueva, 3), "a": round(s.a_nueva, 3), "b": round(s.b_nueva, 3),
+         "ojeras_contraste": s.ojeras_contraste_nueva, "lesiones": s.lesiones_nueva, "lesiones_nuevas": s.lesiones_nuevas}
         for s in filas
     ]
     return {
@@ -61,8 +62,10 @@ def reporte_evolucion_csv(
     audit.registrar(db, request, usuario, "reportes", "exportar_csv", entidad="paciente", entidad_id=pac.id)
     return respuesta_csv(
         f"Evolución colorimétrica - {pac.nombre} {pac.apellido} (CI {pac.cedula})",
-        ["Fecha", "Delta E promedio", "L* (nueva)", "a* (nueva)", "b* (nueva)", "Tiempo de procesamiento (ms)"],
-        [(s.fecha, s.delta_e_promedio, s.l_nueva, s.a_nueva, s.b_nueva, s.tiempo_procesamiento_ms) for s in filas],
+        ["Fecha", "Delta E promedio", "L* (nueva)", "a* (nueva)", "b* (nueva)", "Contraste ojeras (L*)", "Lesiones", "Lesiones nuevas",
+         "SSIM sin alinear", "SSIM alineada", "Tiempo de procesamiento (ms)"],
+        [(s.fecha, s.delta_e_promedio, s.l_nueva, s.a_nueva, s.b_nueva, s.ojeras_contraste_nueva, s.lesiones_nueva, s.lesiones_nuevas,
+          s.ssim_antes, s.ssim_despues, s.tiempo_procesamiento_ms) for s in filas],
         filtros={"desde": desde, "hasta": hasta, "separador_decimal": decimal},
         totales={"Delta E promedio general": promedio} if promedio is not None else None,
         decimal=decimal, prefijo_archivo=f"evolucion_ci{pac.cedula}",

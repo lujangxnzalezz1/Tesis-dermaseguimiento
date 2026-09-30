@@ -217,3 +217,25 @@ export function ResumenLesiones({ s }: { s: any }) {
     </View>
   );
 }
+
+/** RF-16: ojeras. Contraste = cuánto más oscura es la zona bajo el ojo que la mejilla (mayor = más marcada). */
+export function ResumenOjeras({ s }: { s: any }) {
+  if (s.ojeras_contraste_nueva == null) return null;
+  const dif = s.ojeras_contraste_nueva - s.ojeras_contraste_referencia;
+  const tendencia = Math.abs(dif) < 1.5 ? 'sin cambios relevantes' : dif > 0 ? 'más marcadas que en la referencia' : 'más atenuadas que en la referencia';
+  const ojo = (d: any) => (d ? `${d.contraste_L.toFixed(1)}` : '—');
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={{ fontSize: 17, fontWeight: '600', color: COLOR.primario, marginBottom: 6 }}>Región periorbital (ojeras)</Text>
+      <Text>Contraste: {s.ojeras_contraste_referencia.toFixed(1)} en la referencia → {s.ojeras_contraste_nueva.toFixed(1)} ahora ({tendencia})</Text>
+      {s.ojeras_detalle?.nueva && (
+        <Text style={{ color: '#444' }}>Ojo derecho: {ojo(s.ojeras_detalle.nueva.derecho)} · Ojo izquierdo: {ojo(s.ojeras_detalle.nueva.izquierdo)}</Text>
+      )}
+      {s.url_imagen_periorbital && <ImagenProtegida url={s.url_imagen_periorbital} />}
+      <Text style={{ color: '#666', fontSize: 12, marginTop: 6 }}>
+        Contraste = diferencia de luminosidad (L*) entre la mejilla y la zona bajo el ojo. Al compararse dentro de la misma foto,
+        es menos sensible a los cambios de iluminación.
+      </Text>
+    </View>
+  );
+}

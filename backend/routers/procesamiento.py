@@ -27,6 +27,7 @@ from services.calidad_captura import evaluar_captura
 from services import deteccion_acne
 from services.analisis_colorimetrico import _calcular_mascara_rostro
 from services.similitud import ssim
+from services.periorbital import analizar_periorbital, dibujar_regiones
 from services.procesamiento_imagenes import procesar_par_de_imagenes
 from services.suscripcion_service import exigir_acceso_avanzado
 
@@ -62,6 +63,9 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         lesiones_referencia=s.lesiones_referencia, lesiones_nueva=s.lesiones_nueva, lesiones_nuevas=s.lesiones_nuevas,
         lesiones_persistentes=s.lesiones_persistentes, lesiones_resueltas=s.lesiones_resueltas,
         url_imagen_lesiones=f"/archivos/{s.ruta_imagen_lesiones}" if s.ruta_imagen_lesiones else None,
+        ojeras_contraste_referencia=s.ojeras_contraste_referencia, ojeras_contraste_nueva=s.ojeras_contraste_nueva,
+        ojeras_detalle=json.loads(s.ojeras_detalle) if s.ojeras_detalle else None,
+        url_imagen_periorbital=f"/archivos/{s.ruta_imagen_periorbital}" if s.ruta_imagen_periorbital else None,
     )
 
 
@@ -113,6 +117,11 @@ def procesar_seguimiento(
         # RF-13: SSIM sin alinear (solo redimensionada) vs. alineada, sobre el rostro
         ssim_antes = ssim(ref_bgr, cv2.resize(nueva_bgr, (ancho, alto)), mascara)
         ssim_despues = ssim(ref_bgr, resultado["imagen_alineada"], mascara)
+        # RF-16: ojeras. La imagen alineada tiene la geometría de la referencia, así que se usan sus puntos.
+        puntos_ref = resultado["puntos_referencia"]
+        ojeras_ref = analizar_periorbital(ref_bgr, puntos_ref)
+        ojeras_nueva = analizar_periorbital(resultado["imagen_alineada"], puntos_ref)
+        imagen_ojeras = dibujar_regiones(resultado["imagen_alineada"], puntos_ref) if ojeras_nueva else None
         # RF-14 / RF-15: detección y comparación de lesiones (si el modelo está instalado)
         lesiones = None
         if deteccion_acne.disponible():
@@ -131,6 +140,8 @@ def procesar_seguimiento(
     claves = {k: alm.nueva_clave() for k in ("ref", "nueva", "alineada", "mapa")}
     if lesiones:
         claves["lesiones"] = alm.nueva_clave()
+    if imagen_ojeras is not None:
+        claves["ojeras"] = alm.nueva_clave()
     try:
         alm.guardar_imagen(ref_bgr, claves["ref"])
         alm.guardar_imagen(nueva_bgr, claves["nueva"])
@@ -138,6 +149,8 @@ def procesar_seguimiento(
         alm.guardar_imagen(analisis["mapa_calor"], claves["mapa"])
         if lesiones:
             alm.guardar_imagen(lesiones["imagen"], claves["lesiones"])
+        if imagen_ojeras is not None:
+            alm.guardar_imagen(imagen_ojeras, claves["ojeras"])
         seg = Seguimiento(
             paciente_id=paciente.id, usuario_id=usuario_actual.id, fecha=ahora(),
             ruta_imagen_referencia=claves["ref"], ruta_imagen_nueva=claves["nueva"],
@@ -155,6 +168,11 @@ def procesar_seguimiento(
             seg.lesiones_resueltas = len(lesiones["resueltas"])
             seg.lesiones_detalle = json.dumps({k: lesiones[k] for k in ("referencia", "nueva", "nuevas", "persistentes", "resueltas")})
             seg.ruta_imagen_lesiones = claves["lesiones"]
+        if ojeras_ref and ojeras_nueva:
+            seg.ojeras_contraste_referencia = ojeras_ref["contraste_L_promedio"]
+            seg.ojeras_contraste_nueva = ojeras_nueva["contraste_L_promedio"]
+            seg.ojeras_detalle = json.dumps({"referencia": ojeras_ref, "nueva": ojeras_nueva})
+            seg.ruta_imagen_periorbital = claves["ojeras"]
         db.add(seg)
         db.commit()
         db.refresh(seg)
@@ -206,7 +224,7 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
             or_(
                 Seguimiento.ruta_imagen_referencia == clave, Seguimiento.ruta_imagen_nueva == clave,
                 Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
-                Seguimiento.ruta_imagen_lesiones == clave,
+                Seguimiento.ruta_imagen_lesiones == clave, Seguimiento.ruta_imagen_periorbital == clave,
             ),
         )
         .first()

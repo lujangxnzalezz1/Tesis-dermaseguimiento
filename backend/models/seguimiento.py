@@ -46,5 +46,11 @@ class Seguimiento(Base):
     lesiones_detalle = Column(Text, nullable=True)  # JSON con los recuadros
     ruta_imagen_lesiones = Column(String, nullable=True)
 
+    # RF-16: región periorbital (ojeras). Contraste = L*(mejilla) - L*(ojera); mayor = ojera más marcada
+    ojeras_contraste_referencia = Column(Float, nullable=True)
+    ojeras_contraste_nueva = Column(Float, nullable=True)
+    ojeras_detalle = Column(Text, nullable=True)  # JSON con L*a*b* por ojo, de ambas consultas
+    ruta_imagen_periorbital = Column(String, nullable=True)
+
     paciente = relationship("Paciente")
     usuario = relationship("Usuario")
