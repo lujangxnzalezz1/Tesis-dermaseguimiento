@@ -1,7 +1,8 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Image, Text } from 'react-native';
+import { Image, Text } from 'react-native';
+import { avisar, elegirOrigenFoto } from '../lib/dialogo';
 import { Aviso, Boton, ImagenProtegida, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 
@@ -24,7 +25,7 @@ function extraer(resultado: ImagePicker.ImagePickerResult): { imagen: Imagen; er
 async function elegir(origen: 'galeria' | 'camara') {
   const permiso = origen === 'galeria' ? await ImagePicker.requestMediaLibraryPermissionsAsync() : await ImagePicker.requestCameraPermissionsAsync();
   if (!permiso.granted) {
-    Alert.alert('Permiso necesario', origen === 'galeria' ? 'Necesitamos acceso a tus fotos para continuar.' : 'Necesitamos acceso a la cámara para continuar.');
+    avisar('Permiso necesario', origen === 'galeria' ? 'Necesitamos acceso a tus fotos para continuar.' : 'Necesitamos acceso a la cámara para continuar.');
     return { imagen: null };
   }
   const opciones: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.8 };
@@ -41,11 +42,11 @@ export default function ProcesamientoScreen() {
   const [res, setRes] = useState<any>(null);
 
   const pedir = (poner: (i: Imagen) => void) =>
-    Alert.alert('Seleccionar imagen', '¿De dónde querés obtener la foto?', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Galería', onPress: async () => { const r = await elegir('galeria'); if (r.error) setError(r.error); else if (r.imagen) { setError(null); poner(r.imagen); } } },
-      { text: 'Cámara', onPress: async () => { const r = await elegir('camara'); if (r.error) setError(r.error); else if (r.imagen) { setError(null); poner(r.imagen); } } },
-    ]);
+    elegirOrigenFoto(async (origen) => {
+      const r = await elegir(origen);
+      if (r.error) setError(r.error);
+      else if (r.imagen) { setError(null); poner(r.imagen); }
+    });
 
   const procesar = async () => {
     setError(null); setSinPlan(false);

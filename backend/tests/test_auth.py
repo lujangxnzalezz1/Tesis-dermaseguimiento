@@ -106,7 +106,8 @@ def test_inactivar_exige_confirmacion_y_motivo(client, admin):
 # ------------------------------------------------------------------ sesiones (punto 3)
 def test_rutas_protegidas_sin_token_o_con_token_falso(client):
     for ruta in ("/perfil", "/pacientes", "/suscripcion", "/notificaciones", "/pagos"):
-        assert client.get(ruta).status_code == 401
+        r = client.get(ruta)
+        assert r.status_code == 401 and r.json()["detail"] == "Necesitás iniciar sesión para continuar." 
     assert client.get("/perfil", headers={"Authorization": "Bearer abc.def.ghi"}).status_code == 401
 
 

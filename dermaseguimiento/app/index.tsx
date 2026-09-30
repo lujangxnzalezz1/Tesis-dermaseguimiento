@@ -1,9 +1,9 @@
 import { router } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { Aviso, Boton, Campo, Pantalla, Titulo } from '../components/ui';
 import { api, mensaje } from '../lib/api';
-import { guardarToken } from '../lib/auth';
+import { guardarToken, obtenerToken } from '../lib/auth';
 import { EMAIL_RE } from '../lib/politica';
 
 export default function LoginScreen() {
@@ -11,6 +11,11 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Con una sesión guardada no hace falta volver a ingresar.
+  useEffect(() => {
+    if (obtenerToken()) router.replace('/pacientes');
+  }, []);
 
   const ingresar = async () => {
     setError(null);
@@ -32,7 +37,7 @@ export default function LoginScreen() {
       <Text style={{ color: '#666', marginBottom: 24 }}>Iniciá sesión para continuar</Text>
       {error && <Aviso tipo="error" texto={error} />}
       <Campo etiqueta="Correo electrónico" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" maxLength={120} />
-      <Campo etiqueta="Contraseña" value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" maxLength={128} />
+      <Campo etiqueta="Contraseña" value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" maxLength={128} onSubmitEditing={ingresar} returnKeyType="go" />
       <Boton texto="Ingresar" icono="log-in-outline" onPress={ingresar} cargando={cargando} />
       <View style={{ height: 8 }} />
       <Boton texto="Crear cuenta" icono="person-add-outline" variante="secundario" onPress={() => router.push('/registro')} />

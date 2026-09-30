@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
-import { ComponentProps, ReactNode, useState } from 'react';
+import { ComponentProps, ReactNode, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
   Modal,
+  Platform,
   ScrollView,
   StyleProp,
   StyleSheet,
@@ -135,10 +136,24 @@ export function Confirmar({
   );
 }
 
-/** Imagen clínica: el servidor la entrega solo con el token de sesión (no son públicas). */
+/** Imagen clínica: el servidor la entrega solo con el token de sesión (no son públicas).
+ *  En web <img> no puede enviar cabeceras, así que se descarga con fetch y se muestra como blob. */
 export function ImagenProtegida({ url, estilo }: { url: string; estilo?: StyleProp<any> }) {
   const token = obtenerToken();
-  return <Image source={{ uri: `${API_URL}${url}`, headers: token ? { Authorization: `Bearer ${token}` } : undefined }} style={[estilos.imagen, estilo]} resizeMode="cover" />;
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let creado: string | null = null;
+    fetch(`${API_URL}${url}`, { headers: token ? { Authorization: `Bearer ${token}` } : {} })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => { if (b) { creado = URL.createObjectURL(b); setBlobUrl(creado); } })
+      .catch(() => null);
+    return () => { if (creado) URL.revokeObjectURL(creado); };
+  }, [url, token]);
+  const source = Platform.OS === 'web'
+    ? (blobUrl ? { uri: blobUrl } : undefined)
+    : { uri: `${API_URL}${url}`, headers: token ? { Authorization: `Bearer ${token}` } : undefined };
+  return <Image source={source} style={[estilos.imagen, estilo]} resizeMode="contain" />;
 }
 
 const estilos = StyleSheet.create({

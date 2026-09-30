@@ -123,4 +123,6 @@ if settings.PASARELA == "sandbox":
         if codigo >= 400:
             return _pagina("Error", "<h2>No pudimos avisar al comercio</h2><p>Intentá de nuevo en unos minutos.</p>")
         textos = {"aprobado": "¡Pago aprobado!", "rechazado": "Pago rechazado", "cancelado": "Pago cancelado", "pendiente": "Pago pendiente"}
-        return _pagina("Resultado", f"<h2>{textos[decision]}</h2><p>Ya podés cerrar esta ventana y volver a la aplicación.</p>")
+        volver = settings.CORS_ORIGINS.split(",")[0].strip()
+        enlace = f'<p><a href="{escape(volver)}/suscripcion">Volver a la aplicación (versión web)</a></p>' if volver else ""
+        return _pagina("Resultado", f"<h2>{textos[decision]}</h2><p>Ya podés cerrar esta ventana y volver a la aplicación.</p>{enlace}")

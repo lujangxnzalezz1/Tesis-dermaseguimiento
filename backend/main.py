@@ -2,6 +2,7 @@ import logging
 import os
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 
 from core import errores
 from core.config import settings
@@ -16,6 +17,13 @@ os.makedirs(settings.RUTA_ALMACENAMIENTO, exist_ok=True)
 
 app = FastAPI(title="DermaSeguimiento API")
 errores.instalar(app)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-Total-Count", "Content-Disposition"],
+)
 
 
 @app.middleware("http")

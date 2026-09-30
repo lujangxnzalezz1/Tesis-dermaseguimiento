@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Text } from 'react-native';
+import { avisar } from '../lib/dialogo';
 import { Aviso, Boton, Campo, Casilla, COLOR, Pantalla, ReglasPassword, Titulo } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { EMAIL_RE, usePoliticaPassword } from '../lib/politica';
@@ -29,7 +30,7 @@ export default function RegistroScreen() {
     });
     setCargando(false);
     if (!r.ok) return setError(mensaje(r));
-    Alert.alert('¡Cuenta creada!', 'Ya podés iniciar sesión. Tenés un período de prueba con todas las funciones.', [{ text: 'Ir a ingresar', onPress: () => router.replace('/') }]);
+    avisar('¡Cuenta creada!', 'Ya podés iniciar sesión. Tenés un período de prueba con todas las funciones.', () => router.replace('/'));
   };
 
   return (

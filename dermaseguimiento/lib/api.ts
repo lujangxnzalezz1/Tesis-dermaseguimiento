@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { Alert } from 'react-native';
+import { avisar } from './dialogo';
 import { API_URL, borrarToken, obtenerToken } from './auth';
 
 export type RespuestaApi<T = any> = { ok: boolean; status: number; data: T };
@@ -35,7 +35,7 @@ export async function api<T = any>(
     } catch {
       data = null;
     }
-    if (r.status === 401 && auth && token) {
+    if (r.status === 401 && auth) {
       await sesionExpirada(data?.detail);
     }
     return { ok: r.ok, status: r.status, data };
@@ -55,15 +55,10 @@ async function sesionExpirada(detalle?: string) {
   await borrarToken();
   if (avisandoSesion) return;
   avisandoSesion = true;
-  Alert.alert('Sesión cerrada', detalle ?? 'Tu sesión terminó. Iniciá sesión de nuevo.', [
-    {
-      text: 'Aceptar',
-      onPress: () => {
-        avisandoSesion = false;
-        router.replace('/');
-      },
-    },
-  ]);
+  avisar('Sesión cerrada', detalle ?? 'Tu sesión terminó. Iniciá sesión de nuevo.', () => {
+    avisandoSesion = false;
+    router.replace('/');
+  });
 }
 
 export function mensaje(r: RespuestaApi, porDefecto = 'No se pudo completar la operación. Intentá de nuevo.'): string {

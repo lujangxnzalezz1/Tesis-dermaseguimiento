@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text } from 'react-native';
+import { Text } from 'react-native';
+import { avisar } from '../lib/dialogo';
 import { Aviso, Boton, Campo, Pantalla, ReglasPassword, Titulo } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { usePoliticaPassword } from '../lib/politica';
@@ -24,7 +25,7 @@ export default function RestablecerScreen() {
     const r = await api('/restablecer-contrasena', { method: 'POST', auth: false, json: { token: token.trim(), password, confirmar_password: confirmar } });
     setCargando(false);
     if (!r.ok) return setError(mensaje(r));
-    Alert.alert('Listo', r.data.mensaje, [{ text: 'Ir a ingresar', onPress: () => router.replace('/') }]);
+    avisar('Listo', r.data.mensaje, () => router.replace('/'));
   };
 
   return (

@@ -1,4 +1,4 @@
-import { Stack, router } from 'expo-router';
+import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { cargarToken } from '../lib/auth';
@@ -7,12 +7,9 @@ export default function RootLayout() {
   const [listo, setListo] = useState(false);
 
   useEffect(() => {
-    // Recupera la sesión guardada; si el servidor la considera vencida, la primera llamada devolverá 401
-    // y la app volverá al inicio de sesión sola.
-    cargarToken().then((t) => {
-      setListo(true);
-      if (t) setTimeout(() => router.replace('/pacientes'), 0);
-    });
+    // Recupera la sesión guardada antes de mostrar cualquier pantalla. Si el servidor la considera
+    // vencida, la primera llamada devolverá 401 y la app volverá sola al inicio de sesión.
+    cargarToken().then(() => setListo(true));
   }, []);
 
   if (!listo) {

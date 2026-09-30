@@ -19,15 +19,13 @@ export const API_URL: string =
   (IP_DISPOSITIVO_FISICO ? `http://${IP_DISPOSITIVO_FISICO}:8000` : `http://${HOST_EMULADOR}:8000`);
 
 // El token se guarda cifrado en el llavero del sistema (SecureStore) para que la sesión
-// sobreviva al cierre de la app. En web (sin SecureStore) queda solo en memoria.
+// sobreviva al cierre de la app. En web se usa sessionStorage (dura mientras la pestaña esté abierta).
 const CLAVE_TOKEN = 'derma_token';
 let tokenActual: string | null = null;
 
 export async function cargarToken(): Promise<string | null> {
   try {
-    if (Platform.OS !== 'web') {
-      tokenActual = await SecureStore.getItemAsync(CLAVE_TOKEN);
-    }
+    tokenActual = Platform.OS === 'web' ? window.sessionStorage.getItem(CLAVE_TOKEN) : await SecureStore.getItemAsync(CLAVE_TOKEN);
   } catch {
     tokenActual = null;
   }
@@ -37,7 +35,8 @@ export async function cargarToken(): Promise<string | null> {
 export async function guardarToken(token: string) {
   tokenActual = token;
   try {
-    if (Platform.OS !== 'web') await SecureStore.setItemAsync(CLAVE_TOKEN, token);
+    if (Platform.OS === 'web') window.sessionStorage.setItem(CLAVE_TOKEN, token);
+    else await SecureStore.setItemAsync(CLAVE_TOKEN, token);
   } catch {
     /* si el llavero falla, la sesión queda solo en memoria */
   }
@@ -50,7 +49,8 @@ export function obtenerToken(): string | null {
 export async function borrarToken() {
   tokenActual = null;
   try {
-    if (Platform.OS !== 'web') await SecureStore.deleteItemAsync(CLAVE_TOKEN);
+    if (Platform.OS === 'web') window.sessionStorage.removeItem(CLAVE_TOKEN);
+    else await SecureStore.deleteItemAsync(CLAVE_TOKEN);
   } catch {
     /* nada que hacer */
   }

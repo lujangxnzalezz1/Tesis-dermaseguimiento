@@ -68,6 +68,8 @@ def instalar(app: FastAPI) -> None:
             detalle = exc.detail
         else:
             detalle = "No se pudo completar la operación."
+        if detalle == "Not authenticated":
+            detalle = "Necesitás iniciar sesión para continuar."
         if exc.status_code == 404 and detalle == "Not Found":
             detalle = "No encontramos lo que buscás."
         if exc.status_code == 405:

@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Text, TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
+import { avisar } from '../lib/dialogo';
 import { Aviso, Boton, Campo, COLOR, Pantalla, Titulo } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 
@@ -30,7 +31,7 @@ export default function SusScreen() {
     const r = await api('/sus', { method: 'POST', json: { respuestas: resp, comentario: comentario || null } });
     setCargando(false);
     if (!r.ok) return setError(mensaje(r));
-    Alert.alert('¡Gracias!', r.data.mensaje, [{ text: 'Cerrar', onPress: () => router.back() }]);
+    avisar('¡Gracias!', r.data.mensaje, () => router.back());
   };
 
   return (

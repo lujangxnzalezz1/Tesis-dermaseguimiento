@@ -1,6 +1,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Text, View } from 'react-native';
+import { API_URL, obtenerToken } from '../lib/auth';
 import { useFocusEffect } from 'expo-router';
 import { Aviso, Boton, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
@@ -65,6 +66,24 @@ export default function SuscripcionScreen() {
     setInfo(r.data.mensaje); cargar();
   };
 
+  const descargarComprobante = async (id: number, numero: string) => {
+    setError(null);
+    if (Platform.OS !== 'web') {
+      setInfo(`El PDF del comprobante ${numero} se puede descargar desde la versión web de la app.`);
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/comprobantes/${id}/pdf`, { headers: { Authorization: `Bearer ${obtenerToken()}` } });
+      if (!r.ok) return setError('No pudimos descargar el comprobante. Intentá de nuevo.');
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement('a');
+      a.href = url; a.download = `${numero}.pdf`; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
+      setError('No pudimos conectarnos con el servidor para descargar el comprobante.');
+    }
+  };
+
   if (!susc && !error) return <Pantalla><ActivityIndicator size="large" color={COLOR.primario} /></Pantalla>;
 
   const actual = susc?.plan?.codigo;
@@ -110,6 +129,9 @@ export default function SuscripcionScreen() {
         <View key={p.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' }}>
           <Text style={{ fontWeight: '600' }}>{fechaCorta(p.fecha)} — {p.plan}</Text>
           <Text>{p.monto} {p.moneda} · {p.estado}{p.comprobante_numero ? ` · Comprobante ${p.comprobante_numero}` : ''}</Text>
+          {p.comprobante_id && (
+            <Boton texto="Descargar comprobante (PDF)" icono="download-outline" variante="texto" onPress={() => descargarComprobante(p.comprobante_id, p.comprobante_numero)} />
+          )}
         </View>
       ))}
 

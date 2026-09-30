@@ -71,6 +71,8 @@ class Settings(BaseSettings):
     PASARELA_WEBHOOK_SECRET: str = Field(min_length=16)  # obligatorio: sin valor por defecto conocido
     PASARELA_WEBHOOK_TOLERANCIA_SEGUNDOS: int = 300
     BASE_URL: str = "http://localhost:8000"
+    # Orígenes web permitidos (versión web de la app). Separados por coma.
+    CORS_ORIGINS: str = "http://localhost:8081,http://127.0.0.1:8081"
     EMISOR_NOMBRE: str = "DermaSeguimiento"
     EMISOR_RUC: str = ""
     EMISOR_EMAIL: str = "lujangxnzalezz1@gmail.com"
