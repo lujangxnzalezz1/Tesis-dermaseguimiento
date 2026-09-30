@@ -1,7 +1,12 @@
 from datetime import datetime
 from typing import Optional
 
+import logging
+
+from email_validator import EmailNotValidError, validate_email
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator, model_validator
+
+from core.config import settings
 
 from core.politica_password import validar_password
 from schemas.comunes import limpiar_texto
@@ -23,7 +28,15 @@ class UsuarioRegistro(BaseModel):
     @field_validator("email")
     @classmethod
     def _email(cls, v):
-        return v.lower()
+        v = v.lower()
+        if settings.VERIFICAR_DOMINIO_EMAIL:
+            try:
+                validate_email(v, check_deliverability=True)  # consulta los registros DNS (MX) del dominio
+            except EmailNotValidError:
+                raise ValueError("El dominio del correo no existe o no puede recibir correos. Revisá que esté bien escrito.")
+            except Exception:
+                logging.getLogger("registro").warning("No se pudo consultar el DNS para %s; se acepta el correo", v)
+        return v
 
     @model_validator(mode="after")
     def _politicas(self):
@@ -43,6 +56,7 @@ class UsuarioRespuesta(BaseModel):
     nombre: str
     rol: str
     activo: bool = True
+    email_verificado: bool = True
 
 
 class UsuarioAdminRespuesta(UsuarioRespuesta):
@@ -58,6 +72,10 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     password_vencida: bool = False
+
+
+class SolicitudReenvio(BaseModel):
+    email: EmailStr
 
 
 class SolicitudRestablecer(BaseModel):

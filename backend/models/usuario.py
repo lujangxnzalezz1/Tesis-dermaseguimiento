@@ -31,6 +31,10 @@ class Usuario(Base):
     password_cambiada_en = Column(DateTime, nullable=True)
     ultimo_acceso = Column(DateTime, nullable=True)
 
+    # Confirmación del correo (las cuentas previas a esta función quedan como verificadas)
+    email_verificado = Column(Boolean, nullable=False, default=True, server_default="true")
+    email_verificado_en = Column(DateTime, nullable=True)
+
     # Consentimiento de la política de privacidad aceptada al registrarse
     politica_aceptada_version = Column(String, nullable=True)
     politica_aceptada_en = Column(DateTime, nullable=True)
@@ -51,8 +55,12 @@ class Sesion(Base):
     ip = Column(String, nullable=True)
 
 
+TOKEN_RESTABLECER = "restablecer"
+TOKEN_VERIFICAR = "verificar_email"
+
+
 class TokenRestablecimiento(Base):
-    """Token de un solo uso para recuperar la contraseña. Se guarda solo el
+    """Token de un solo uso (recuperar contraseña o confirmar el correo). Se guarda solo el
     hash SHA-256; el token en claro únicamente viaja en el correo."""
 
     __tablename__ = "tokens_restablecimiento"
@@ -63,3 +71,4 @@ class TokenRestablecimiento(Base):
     creado_en = Column(DateTime, nullable=False, default=ahora)
     expira_en = Column(DateTime, nullable=False)
     usado_en = Column(DateTime, nullable=True)
+    tipo = Column(String, nullable=False, default=TOKEN_RESTABLECER, server_default=TOKEN_RESTABLECER, index=True)

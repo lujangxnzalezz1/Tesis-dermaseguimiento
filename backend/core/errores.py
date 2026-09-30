@@ -57,7 +57,7 @@ def instalar(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=422,
-            content={"detail": f"Revisá los datos ingresados: {texto}.", "errores": errores},
+            content={"detail": f"Revisá los datos ingresados: {texto.rstrip('.')}.", "errores": errores},
         )
 
     @app.exception_handler(StarletteHTTPException)

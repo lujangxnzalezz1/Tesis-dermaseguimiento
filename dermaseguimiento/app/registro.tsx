@@ -30,7 +30,14 @@ export default function RegistroScreen() {
     });
     setCargando(false);
     if (!r.ok) return setError(mensaje(r));
-    avisar('¡Cuenta creada!', 'Ya podés iniciar sesión. Tenés un período de prueba con todas las funciones.', () => router.replace('/'));
+    avisar(
+      '¡Cuenta creada!',
+      r.data.email_verificado
+        ? 'Ya podés iniciar sesión. Tenés un período de prueba con todas las funciones.'
+        : `Te enviamos un correo a ${email.trim()} para confirmar que es tuyo. Abrí el enlace y después iniciá sesión. ` +
+          'Si no lo ves, revisá el correo no deseado.',
+      () => router.replace('/'),
+    );
   };
 
   return (

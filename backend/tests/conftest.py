@@ -13,6 +13,8 @@ os.environ.update({
     "ENFORCE_SUBSCRIPTION": "true",
     "TRIAL_DAYS": "14",
     "SMTP_ENABLED": "false",
+    "VERIFICAR_DOMINIO_EMAIL": "false",   # sin DNS en las pruebas (se prueba aparte, simulado)
+    "VERIFICAR_EMAIL_REGISTRO": "false",  # se activa en test_verificacion_email.py
 })
 
 import json  # noqa: E402

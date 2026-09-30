@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     CAPTCHA_SECRET: str = ""  # si está vacío, el CAPTCHA queda desactivado
     CAPTCHA_VERIFY_URL: str = "https://www.google.com/recaptcha/api/siteverify"
 
+    # --- Verificación del correo electrónico ---
+    VERIFICAR_DOMINIO_EMAIL: bool = True     # consulta DNS: el dominio debe existir y poder recibir correos
+    VERIFICAR_EMAIL_REGISTRO: bool = True    # la cuenta nueva no puede ingresar hasta confirmar el correo
+    VERIFICACION_EMAIL_HORAS: int = 24
+
     # --- Recuperación de contraseña ---
     RESET_TOKEN_MINUTES: int = 10
     FRONTEND_URL: str = "dermaseguimiento://restablecer"

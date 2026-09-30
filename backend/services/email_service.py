@@ -26,6 +26,12 @@ PLANTILLAS_POR_DEFECTO = {
         "Usá este enlace (vale $minutos minutos y solo puede usarse una vez):\n\n$enlace\n\n"
         "Si no lo pediste vos, ignorá este mensaje: tu contraseña no cambió.\n",
     ),
+    "verificar_email": (
+        "Confirmá tu correo en DermaSeguimiento",
+        "Hola $nombre,\n\nPara activar tu cuenta, confirmá que este es tu correo abriendo este enlace "
+        "(vale $horas horas y se puede usar una sola vez):\n\n$enlace\n\n"
+        "Si no creaste una cuenta en DermaSeguimiento, ignorá este mensaje.\n",
+    ),
     "aviso_vencimiento": (
         "Tu suscripción vence pronto",
         "Hola $nombre,\n\n$mensaje\n\nPodés renovar o cambiar de plan desde la sección Suscripción de la app.\n",
