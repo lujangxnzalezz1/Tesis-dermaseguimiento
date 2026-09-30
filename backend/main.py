@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from core import errores
+from core.url_base import fijar_desde_solicitud
 from core.config import settings
 from routers import (
     admin, auth, pacientes, pasarela_sandbox, privacidad, procesamiento, reportes, sus, suscripciones,
@@ -20,6 +21,7 @@ errores.instalar(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in settings.CORS_ORIGINS.split(",") if o.strip()],
+    allow_origin_regex=settings.CORS_ORIGIN_REGEX or None,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["X-Total-Count", "Content-Disposition"],
@@ -28,6 +30,7 @@ app.add_middleware(
 
 @app.middleware("http")
 async def cabeceras_de_seguridad(request: Request, call_next):
+    fijar_desde_solicitud(request.url.scheme, request.headers.get("host"))
     respuesta = await call_next(request)
     respuesta.headers.setdefault("X-Content-Type-Options", "nosniff")
     respuesta.headers.setdefault("X-Frame-Options", "DENY")

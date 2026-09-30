@@ -18,6 +18,7 @@ import uuid
 from typing import Optional
 
 from core.config import settings
+from core.url_base import url_base
 
 
 class ErrorFirma(Exception):
@@ -48,7 +49,7 @@ class PasarelaSandbox:
     def crear_operacion(self, pago_monto, moneda: str, descripcion: str) -> tuple[str, str]:
         """Devuelve (referencia_externa, url_de_pago)."""
         referencia = "SBX-" + uuid.uuid4().hex[:20].upper()
-        return referencia, f"{settings.BASE_URL}/pasarela-sandbox/checkout/{referencia}"
+        return referencia, f"{url_base()}/pasarela-sandbox/checkout/{referencia}"
 
 
 def obtener_pasarela() -> PasarelaSandbox:
@@ -62,7 +63,7 @@ def enviar_webhook(evento: dict) -> int:
     cuerpo = json.dumps(evento).encode()
     ts = str(int(time.time()))
     req = urllib.request.Request(
-        f"{settings.BASE_URL}/webhooks/pago",
+        f"{url_base()}/webhooks/pago",
         data=cuerpo,
         method="POST",
         headers={"Content-Type": "application/json", "X-Pasarela-Timestamp": ts, "X-Pasarela-Firma": firmar(cuerpo, ts)},

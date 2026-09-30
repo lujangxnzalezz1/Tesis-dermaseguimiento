@@ -2,7 +2,8 @@ import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
 // Dirección del backend. Orden de prioridad:
-//   1) EXPO_PUBLIC_API_URL (archivo .env de la app), p. ej. http://192.168.1.20:8000
+//   0) Versión web: la misma computadora que sirve la página (ver URL_WEB)
+//   1) EXPO_PUBLIC_API_URL (archivo .env de la app, solo app nativa), p. ej. http://192.168.1.20:8000
 //   2) IP_DISPOSITIVO_FISICO, para probar en un celular real por WiFi
 //   3) localhost / 10.0.2.2 para simulador o emulador en la misma computadora
 // En producción debe ser una URL https:// (RNF-04).
@@ -14,7 +15,15 @@ const HOST_EMULADOR = Platform.select({
   default: 'localhost',
 });
 
+// En la versión web el backend está en la misma computadora que sirve la página: se usa esa
+// dirección, así funciona en cualquier red (localhost en la Mac o la IP de la red desde el celular).
+const URL_WEB =
+  Platform.OS === 'web' && typeof window !== 'undefined'
+    ? `${window.location.protocol}//${window.location.hostname}:8000`
+    : null;
+
 export const API_URL: string =
+  URL_WEB ??
   process.env.EXPO_PUBLIC_API_URL ??
   (IP_DISPOSITIVO_FISICO ? `http://${IP_DISPOSITIVO_FISICO}:8000` : `http://${HOST_EMULADOR}:8000`);
 

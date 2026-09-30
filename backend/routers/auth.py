@@ -14,6 +14,7 @@ from core.config import settings
 from core.database import get_db
 from core.politica_password import descripcion_politica
 from core.ratelimit import dependencia as limite
+from core.url_base import url_base
 from core.security import (
     crear_sesion, hash_password, obtener_sesion_actual, obtener_usuario_actual, revocar_sesiones_de_usuario,
     verify_password,
@@ -51,7 +52,7 @@ def _enviar_verificacion(db: Session, usuario: Usuario) -> None:
     ))
     db.commit()
     email_service.enviar(db, usuario.email, "verificar_email", {
-        "nombre": usuario.nombre, "enlace": f"{settings.BASE_URL}/verificar-correo?token={token}",
+        "nombre": usuario.nombre, "enlace": f"{url_base()}/verificar-correo?token={token}",
         "horas": settings.VERIFICACION_EMAIL_HORAS,
     })
 
