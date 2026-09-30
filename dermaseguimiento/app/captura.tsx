@@ -1,5 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
@@ -74,12 +75,48 @@ export default function CapturaScreen() {
     setError(null);
   };
 
+  // En el navegador, la cámara en vivo solo funciona en páginas seguras (https o localhost). Desde el
+  // celular por http://IP-de-la-red no está disponible: se usa la cámara nativa del teléfono.
+  const sinCamaraEnVivo = Platform.OS === 'web' && typeof window !== 'undefined' && !window.isSecureContext;
+
+  const camaraNativa = async () => {
+    setError(null);
+    const r = await ImagePicker.launchCameraAsync({ mediaTypes: ['images'], quality: 0.85 });
+    if (r.canceled || !r.assets?.length) return;
+    setFoto(r.assets[0].uri);
+    verificar(r.assets[0].uri);
+  };
+
+  if (sinCamaraEnVivo && !foto) {
+    return (
+      <ScrollView contentContainerStyle={{ padding: 20, maxWidth: 640, width: '100%', alignSelf: 'center' }}>
+        <Aviso tipo="info" texto="En esta conexión el navegador no permite la vista de cámara con la guía. Se abre la cámara del celular; después la app revisa si la foto sirve." />
+        <Text style={{ marginVertical: 12, lineHeight: 21 }}>
+          Para una buena foto: el rostro completo y centrado, de frente, con el pelo recogido, sin flash y con la misma luz y lugar que la consulta anterior.
+        </Text>
+        {referencia && (
+          <>
+            <Text style={{ fontWeight: '600', color: COLOR.primario }}>Foto de la consulta anterior (repetí esta pose y distancia):</Text>
+            <ImagenProtegida url={referencia} />
+          </>
+        )}
+        {error && <Aviso tipo="error" texto={error} />}
+        <Boton texto="Abrir la cámara del celular" icono="camera" estilo={{ marginTop: 16 }} onPress={camaraNativa} />
+      </ScrollView>
+    );
+  }
+
   if (!permiso) return <View style={e.centro}><ActivityIndicator color={COLOR.primario} /></View>;
   if (!permiso.granted) {
     return (
       <View style={[e.centro, { padding: 24 }]}>
         <Text style={{ textAlign: 'center', marginBottom: 16 }}>Necesitamos acceso a la cámara para tomar la foto de seguimiento.</Text>
-        <Boton texto="Permitir la cámara" icono="camera-outline" onPress={pedirPermiso} />
+        <Boton texto="Permitir la cámara" icono="camera-outline" onPress={async () => {
+          const r = await pedirPermiso();
+          if (!r.granted) setError('No se pudo activar la cámara. Revisá los permisos del navegador o usá la cámara del celular.');
+        }} />
+        {error && <Aviso tipo="error" texto={error} />}
+        <Boton texto="Usar la cámara del celular" icono="camera" variante="texto" onPress={camaraNativa} />
       </View>
     );
   }
