@@ -4,7 +4,9 @@ import { API_URL, borrarToken, obtenerToken } from './auth';
 
 export type RespuestaApi<T = any> = { ok: boolean; status: number; data: T };
 
-let avisandoSesion = false;
+// Token que ya se dio por vencido: evita avisar varias veces cuando varias consultas simultáneas
+// vuelven con 401, y evita que una respuesta atrasada cierre una sesión NUEVA.
+let tokenVencido: string | null = null;
 
 /** Llamada al backend con el token de sesión. Nunca lanza: devuelve ok/status/data con mensajes
  *  ya redactados para el usuario (qué pasó, por qué y qué hacer). */
@@ -36,7 +38,7 @@ export async function api<T = any>(
       data = null;
     }
     if (r.status === 401 && auth) {
-      await sesionExpirada(data?.detail);
+      await sesionExpirada(token, data?.detail);
     }
     return { ok: r.ok, status: r.status, data };
   } catch {
@@ -51,14 +53,23 @@ export async function api<T = any>(
   }
 }
 
-async function sesionExpirada(detalle?: string) {
+/** Vuelve al login descartando las pantallas anteriores, para que «atrás» no muestre datos sin sesión. */
+function irAlLogin() {
+  if (router.canDismiss()) router.dismissAll();
+  router.replace('/');
+}
+
+async function sesionExpirada(tokenUsado: string | null, detalle?: string) {
+  if (!tokenUsado) {
+    // Se llamó sin sesión (por ejemplo, tras recargar): volver al login sin aviso.
+    irAlLogin();
+    return;
+  }
+  if (tokenUsado === tokenVencido) return;        // ya se avisó por este mismo token
+  if (obtenerToken() !== tokenUsado) return;      // ya hay otra sesión: esta respuesta es vieja
+  tokenVencido = tokenUsado;
   await borrarToken();
-  if (avisandoSesion) return;
-  avisandoSesion = true;
-  avisar('Sesión cerrada', detalle ?? 'Tu sesión terminó. Iniciá sesión de nuevo.', () => {
-    avisandoSesion = false;
-    router.replace('/');
-  });
+  avisar('Sesión cerrada', detalle ?? 'Tu sesión terminó. Iniciá sesión de nuevo.', irAlLogin);
 }
 
 export function mensaje(r: RespuestaApi, porDefecto = 'No se pudo completar la operación. Intentá de nuevo.'): string {
@@ -69,7 +80,7 @@ export function mensaje(r: RespuestaApi, porDefecto = 'No se pudo completar la o
 export async function cerrarSesion() {
   await api('/logout', { method: 'POST' });
   await borrarToken();
-  router.replace('/');
+  irAlLogin();
 }
 
 export function fechaCorta(iso?: string | null): string {
