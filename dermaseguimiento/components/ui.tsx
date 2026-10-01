@@ -198,7 +198,7 @@ export function ResumenLesiones({ s }: { s: any }) {
         </Text>
       )}
       {s.lesiones_nueva == null ? (
-        <Text style={{ color: '#666', marginTop: 6 }}>Detección de lesiones no disponible en este servidor.</Text>
+        <Text style={{ color: '#666', marginTop: 6 }}>Esta consulta no tiene análisis de lesiones (se procesó sin el modelo de detección).</Text>
       ) : (
         <>
           <Text style={{ fontSize: 17, fontWeight: '600', color: COLOR.primario, marginTop: 12, marginBottom: 8 }}>Regiones de lesión (YOLOv8)</Text>

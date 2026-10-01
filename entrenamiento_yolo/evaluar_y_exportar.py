@@ -18,7 +18,7 @@ IMGSZ = 1024
 DESTINO = os.path.expanduser("~/Desktop/Tesis/backend/modelos/acne_yolov8n.onnx")
 
 modelo = YOLO(PESOS)
-m = modelo.val(data=DATOS, split="test", imgsz=IMGSZ, batch=8, device="mps", plots=True, project=CORRIDA, name="prueba", exist_ok=True)
+m = modelo.val(data=DATOS, split="test", imgsz=IMGSZ, batch=8, device="cpu", plots=True, project=CORRIDA, name="prueba", exist_ok=True)
 p, r = float(m.box.mp), float(m.box.mr)
 f1 = 2 * p * r / (p + r) if p + r else 0.0
 

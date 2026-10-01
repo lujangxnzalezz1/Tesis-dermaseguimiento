@@ -41,3 +41,6 @@ entrenamiento_yolo/entrenamiento.log
 
 # ---------- HTTPS local (claves privadas: nunca subir) ----------
 https_local/certs/
+
+# Modelo entrenado con ACNE04 (licencia académica): no se redistribuye; se regenera con entrenamiento_yolo/
+backend/modelos/*.onnx

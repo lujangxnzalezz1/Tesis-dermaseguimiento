@@ -1,0 +1,9 @@
+{
+  "mAP50": 0.2917,
+  "mAP50_95": 0.0744,
+  "precision": 0.4112,
+  "recall": 0.3438,
+  "f1": 0.3745,
+  "inferencia_cpu_ms": 71.1,
+  "imagenes_prueba": 292
+}
