@@ -3,6 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { Aviso, Boton, Campo, Casilla, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, cerrarSesion, mensaje } from '../lib/api';
+import { CampoFecha, haceAniosTexto, hoyTexto } from '../components/CampoFecha';
 
 type Paciente = {
   id: number; cedula: string; nombre: string; apellido: string; telefono: string | null; tiene_consentimiento: boolean;
@@ -191,7 +192,8 @@ export default function PacientesScreen() {
           <Campo etiqueta="Cédula" value={f.cedula} onChangeText={set('cedula')} keyboardType="numeric" error={errores.cedula} maxLength={12} />
           <Campo etiqueta="Nombre" value={f.nombre} onChangeText={set('nombre')} error={errores.nombre} maxLength={80} />
           <Campo etiqueta="Apellido" value={f.apellido} onChangeText={set('apellido')} error={errores.apellido} maxLength={80} />
-          <Campo etiqueta="Fecha de nacimiento (opcional)" value={f.fecha_nacimiento} onChangeText={set('fecha_nacimiento')} placeholder="AAAA-MM-DD" error={errores.fecha_nacimiento} maxLength={10} keyboardType="numbers-and-punctuation" />
+          <CampoFecha etiqueta="Fecha de nacimiento (opcional)" valor={f.fecha_nacimiento} onCambio={set('fecha_nacimiento')}
+            error={errores.fecha_nacimiento} minimo={haceAniosTexto(120)} maximo={hoyTexto()} />
           <Text style={{ fontSize: 14, color: '#444', marginBottom: 6 }}>Sexo (opcional)</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
             {[['F', 'Femenino'], ['M', 'Masculino'], ['O', 'Otro']].map(([v, t]) => (

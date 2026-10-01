@@ -1,8 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
-import { Aviso, Boton, Campo, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
+import { CampoFecha, hoyTexto } from '../components/CampoFecha';
 
 const TAM = 10;
 
@@ -44,8 +45,8 @@ export default function HistorialScreen() {
     <Pantalla>
       <Titulo>Historial de seguimiento</Titulo>
       <Text style={{ color: '#666', marginBottom: 12 }}>Paciente: {nombre} {apellido}</Text>
-      <Campo etiqueta="Desde (opcional)" value={desde} onChangeText={setDesde} placeholder="AAAA-MM-DD" maxLength={10} />
-      <Campo etiqueta="Hasta (opcional)" value={hasta} onChangeText={setHasta} placeholder="AAAA-MM-DD" maxLength={10} />
+      <CampoFecha etiqueta="Desde (opcional)" valor={desde} onCambio={setDesde} maximo={hasta || hoyTexto()} />
+      <CampoFecha etiqueta="Hasta (opcional)" valor={hasta} onCambio={setHasta} minimo={desde || undefined} maximo={hoyTexto()} />
       <Boton texto="Filtrar" icono="filter-outline" variante="secundario" onPress={() => cargar(1)} />
       {error && <Aviso tipo="error" texto={error} />}
       {cargando && <ActivityIndicator size="large" color={COLOR.primario} style={{ marginVertical: 16 }} />}
