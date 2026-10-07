@@ -240,6 +240,33 @@ export function ResumenOjeras({ s }: { s: any }) {
   );
 }
 
+/** Descarga el informe en PDF para entregar al paciente (fotos comparadas, resumen en palabras e índices). */
+export function BotonInforme({ seguimientoId }: { seguimientoId: number }) {
+  const [estado, setEstado] = useState<{ cargando?: boolean; error?: string }>({});
+  const descargar = async () => {
+    if (Platform.OS !== 'web') return setEstado({ error: 'El informe en PDF se descarga desde la versión web de la app.' });
+    setEstado({ cargando: true });
+    try {
+      const r = await fetch(`${API_URL}/seguimientos/${seguimientoId}/informe.pdf`, { headers: { Authorization: `Bearer ${obtenerToken()}` } });
+      if (!r.ok) return setEstado({ error: r.status === 402 ? 'El informe en PDF es parte del plan Premium.' : 'No pudimos generar el informe. Intentá de nuevo.' });
+      const nombre = /filename="([^"]+)"/.exec(r.headers.get('content-disposition') || '')?.[1] || 'informe.pdf';
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement('a');
+      a.href = url; a.download = nombre; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+      setEstado({});
+    } catch {
+      setEstado({ error: 'No pudimos conectarnos con el servidor para generar el informe.' });
+    }
+  };
+  return (
+    <View style={{ marginTop: 8 }}>
+      <Boton texto="Descargar informe para el paciente (PDF)" icono="document-text-outline" variante="secundario" cargando={estado.cargando} onPress={descargar} />
+      {estado.error && <Text style={{ color: COLOR.error, marginTop: 4 }}>{estado.error}</Text>}
+    </View>
+  );
+}
+
 /** Manchas: % de la piel analizada que es claramente más oscura que la piel de alrededor (misma superficie en ambas fotos). */
 export function ResumenManchas({ s }: { s: any }) {
   if (s.manchas_pct_nueva == null) return null;

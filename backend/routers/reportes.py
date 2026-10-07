@@ -37,7 +37,7 @@ def reporte_evolucion(
     serie = [
         {"seguimiento_id": s.id, "fecha": s.fecha.isoformat(), "delta_e_promedio": round(s.delta_e_promedio, 3),
          "l": round(s.l_nueva, 3), "a": round(s.a_nueva, 3), "b": round(s.b_nueva, 3),
-         "ojeras_contraste": s.ojeras_contraste_nueva, "lesiones": s.lesiones_nueva, "lesiones_nuevas": s.lesiones_nuevas}
+         "ojeras_contraste": s.ojeras_contraste_nueva, "manchas_pct": s.manchas_pct_nueva, "lesiones": s.lesiones_nueva, "lesiones_nuevas": s.lesiones_nuevas}
         for s in filas
     ]
     return {

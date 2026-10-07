@@ -30,6 +30,7 @@ from services.similitud import ssim
 from services.periorbital import analizar_periorbital, dibujar_regiones
 from services import manchas as manchas_svc
 from services.interpretacion import interpretar
+from services.informe_pdf import generar_informe
 from services.procesamiento_imagenes import procesar_par_de_imagenes
 from services.suscripcion_service import exigir_acceso_avanzado
 
@@ -231,6 +232,22 @@ def listar_seguimientos(
     response.headers["X-Total-Count"] = str(q.count())
     filas = q.order_by(Seguimiento.fecha.desc()).offset((pagina - 1) * tamano).limit(tamano).all()
     return [_a_respuesta(s) for s in filas]
+
+
+@router.get("/seguimientos/{seguimiento_id}/informe.pdf")
+def informe_pdf(seguimiento_id: int, request: Request, db: Session = Depends(get_db),
+                usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Informe para entregar al paciente: fotos comparadas, resumen en palabras e índices (solo del dermatólogo dueño)."""
+    exigir_acceso_avanzado(db, usuario_actual)
+    seg = (db.query(Seguimiento).join(Paciente, Paciente.id == Seguimiento.paciente_id)
+           .filter(Seguimiento.id == seguimiento_id, Paciente.dermatologo_id == usuario_actual.id).first())
+    if not seg:
+        raise HTTPException(404, "No encontramos ese seguimiento o no tenés permiso para verlo.")
+    pdf = generar_informe(seg, seg.paciente, usuario_actual)
+    audit.registrar(db, request, usuario_actual, "reportes", "informe_pdf", entidad="seguimiento", entidad_id=seg.id)
+    nombre = f"informe_ci{seg.paciente.cedula}_{seg.fecha:%Y%m%d}.pdf"
+    return Response(content=pdf, media_type="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nombre}"', "Cache-Control": "no-store"})
 
 
 @router.get("/archivos/{clave:path}")

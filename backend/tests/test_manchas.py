@@ -75,3 +75,19 @@ def test_seguimiento_incluye_manchas(client, doc):
     assert client.get(s["url_imagen_manchas"], headers=doc).status_code == 200
     csv = client.get(f"/pacientes/{p['id']}/reporte.csv", headers=doc).content.decode("utf-8-sig")
     assert "Manchas (% de piel)" in csv
+
+
+def test_informe_pdf(client, doc, doc2):
+    p = crear_paciente(client, doc)
+    jpg = lambda i: cv2.imencode(".jpg", i)[1].tobytes()  # noqa: E731
+    r = client.post("/procesar-seguimiento", data={"paciente_id": str(p["id"])}, headers=doc, files={
+        "imagen_referencia": ("r.jpg", jpg(ROSTRO), "image/jpeg"),
+        "imagen_nueva": ("n.jpg", jpg(_oscurecer(ROSTRO, MEJILLA, (40, 30), 0.75)), "image/jpeg")})
+    assert r.status_code == 201, r.text
+    pdf = client.get(f"/seguimientos/{r.json()['id']}/informe.pdf", headers=doc)
+    assert pdf.status_code == 200 and pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content[:4] == b"%PDF" and 20_000 < len(pdf.content) < 3_000_000  # incluye las fotos, sin pesar demasiado
+    assert "attachment" in pdf.headers["content-disposition"]
+    assert client.get("/seguimientos/999999/informe.pdf", headers=doc).status_code == 404
+    assert client.get(f"/seguimientos/{r.json()['id']}/informe.pdf", headers=doc2).status_code == 404  # paciente de otro
+    assert client.get(f"/seguimientos/{r.json()['id']}/informe.pdf").status_code == 401

@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
-import { Aviso, Boton, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, BotonInforme, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { CampoFecha, hoyTexto } from '../components/CampoFecha';
 
@@ -55,6 +55,7 @@ export default function HistorialScreen() {
         <Tarjeta key={s.id}>
           <Text style={{ fontWeight: '600', color: COLOR.primario }}>{fechaCorta(s.fecha)}</Text>
           <Interpretacion s={s} />
+          <BotonInforme seguimientoId={s.id} />
           <ImagenProtegida url={s.url_imagen_alineada} />
           <Text style={{ marginTop: 8, color: '#444' }}>Puntos faciales: {s.landmarks_referencia} / {s.landmarks_nueva}</Text>
           <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
