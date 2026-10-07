@@ -52,5 +52,11 @@ class Seguimiento(Base):
     ojeras_detalle = Column(Text, nullable=True)  # JSON con L*a*b* por ojo, de ambas consultas
     ruta_imagen_periorbital = Column(String, nullable=True)
 
+    # Manchas: % de la piel analizada que es claramente más oscura que su entorno (misma superficie en ambas fotos)
+    manchas_pct_referencia = Column(Float, nullable=True)
+    manchas_pct_nueva = Column(Float, nullable=True)
+    manchas_detalle = Column(Text, nullable=True)  # JSON con cantidad y contraste de ambas consultas
+    ruta_imagen_manchas = Column(String, nullable=True)
+
     paciente = relationship("Paciente")
     usuario = relationship("Usuario")

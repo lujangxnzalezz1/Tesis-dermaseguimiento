@@ -240,6 +240,34 @@ export function ResumenOjeras({ s }: { s: any }) {
   );
 }
 
+/** Manchas: % de la piel analizada que es claramente más oscura que la piel de alrededor (misma superficie en ambas fotos). */
+export function ResumenManchas({ s }: { s: any }) {
+  if (s.manchas_pct_nueva == null) return null;
+  const dif = s.manchas_pct_nueva - s.manchas_pct_referencia;
+  const tendencia = Math.abs(dif) < 0.5 ? 'sin cambios relevantes' : dif > 0 ? 'más superficie que en la referencia' : 'menos superficie que en la referencia';
+  const pct = (v: number) => `${v.toFixed(2).replace('.', ',')} %`;
+  const ref = s.manchas_detalle?.referencia, act = s.manchas_detalle?.nueva;
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={{ fontSize: 17, fontWeight: '600', color: COLOR.primario, marginBottom: 6 }}>Manchas</Text>
+      <Text>Superficie con manchas: {pct(s.manchas_pct_referencia)} en la referencia → {pct(s.manchas_pct_nueva)} ahora ({tendencia})</Text>
+      {ref && act && (
+        <Text style={{ color: '#444' }}>Zonas: {ref.cantidad} → {act.cantidad} · Contraste promedio: {ref.contraste_medio} % → {act.contraste_medio} %</Text>
+      )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+        <Text style={{ color: '#28a8e6', fontWeight: '600' }}>▢ Referencia</Text>
+        <Text style={{ color: '#ff8c00', fontWeight: '600' }}>▢ Esta consulta</Text>
+        <Text style={{ color: '#888', fontWeight: '600' }}>▢ Piel analizada</Text>
+      </View>
+      {s.url_imagen_manchas && <ImagenProtegida url={s.url_imagen_manchas} />}
+      <Text style={{ color: '#666', fontSize: 12, marginTop: 6 }}>
+        Índice para comparar consultas, no diagnóstico: marca zonas al menos un 10 % más oscuras que la piel de alrededor. No analiza ojos,
+        ojeras, nariz, labios ni el borde del rostro, y descarta surcos y pliegues. Una sombra fuerte o el maquillaje pueden afectar el resultado.
+      </Text>
+    </View>
+  );
+}
+
 /** Resumen en lenguaje natural (lo primero que lee el dermatólogo). Los números quedan como detalle técnico. */
 export function Interpretacion({ s }: { s: any }) {
   const i = s.interpretacion;

@@ -1,7 +1,7 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
-import { Aviso, Boton, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, COLOR, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { CampoFecha, hoyTexto } from '../components/CampoFecha';
 
@@ -62,6 +62,7 @@ export default function HistorialScreen() {
           <ImagenProtegida url={s.url_mapa_calor} />
           <ResumenLesiones s={s} />
           <ResumenOjeras s={s} />
+          <ResumenManchas s={s} />
         </Tarjeta>
       ))}
       {items.length > 0 && items.length % TAM === 0 && !cargando && (

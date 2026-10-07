@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     INTERP_DELTA_E_MARCADO: float = 10.0
     INTERP_UMBRAL_COMPONENTE: float = 1.5   # cambio mínimo en L*, a* o b* para describir una dirección
     INTERP_UMBRAL_OJERAS: float = 1.5       # cambio mínimo en el contraste de ojeras
+    INTERP_UMBRAL_MANCHAS_PCT: float = 0.5  # cambio mínimo en el % de piel con manchas (puntos porcentuales)
+
+    # --- Manchas (zonas más oscuras que la piel de alrededor) ---
+    MANCHAS_UMBRAL_RELATIVO: float = 0.10  # una zona cuenta si es al menos un 10 % más oscura (L*) que su entorno
+    MANCHAS_ELONGACION_MAX: float = 3.0     # más alargada que esto = surco o pliegue, no mancha
+    MANCHAS_ESCALA_FONDO: float = 0.10  # radio del entorno de comparación / ancho del rostro
+    MANCHAS_AREA_MIN: float = 0.0004    # área mínima de una mancha / área de piel analizada (descarta poros y ruido)
+    MANCHAS_MARGEN_BORDE: float = 0.05  # borde del rostro que no se analiza (pelo, sombra del contorno)
 
     # --- Guía de captura (RF-03): umbrales del control de calidad de la foto ---
     CAPTURA_ANCHO_ROSTRO_MIN: float = 0.35   # ancho del rostro / ancho de la foto

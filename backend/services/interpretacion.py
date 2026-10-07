@@ -76,6 +76,15 @@ def interpretar(seg) -> dict:
         else:
             frases.append(f"Las ojeras se ven {'más marcadas' if d > 0 else 'más atenuadas'} que en la consulta de referencia.")
 
+    if seg.manchas_pct_nueva is not None and seg.manchas_pct_referencia is not None:
+        d = seg.manchas_pct_nueva - seg.manchas_pct_referencia
+        cifras = f"{_num(seg.manchas_pct_referencia)} % de la piel analizada en la referencia y {_num(seg.manchas_pct_nueva)} % ahora"
+        if abs(d) < s.INTERP_UMBRAL_MANCHAS_PCT:
+            frases.append(f"Las zonas más oscuras que la piel de alrededor (manchas) ocupan una superficie similar ({cifras}).")
+        else:
+            frases.append(f"Las zonas más oscuras que la piel de alrededor (manchas) ocupan {'más' if d > 0 else 'menos'} "
+                          f"superficie que en la referencia ({cifras}).")
+
     if seg.ssim_antes is not None and seg.ssim_despues is not None and seg.ssim_despues > seg.ssim_antes:
         frases.append("La alineación automática hizo las fotos comparables (la similitud estructural subió de "
                       f"{_num(seg.ssim_antes)} a {_num(seg.ssim_despues)}).")

@@ -3,7 +3,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, Text } from 'react-native';
 import { avisar, elegirOrigenFoto } from '../lib/dialogo';
-import { Aviso, Boton, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { tomarFotoPendiente } from '../lib/capturaStore';
 
@@ -140,6 +140,7 @@ export default function ProcesamientoScreen() {
           <ImagenProtegida url={res.url_mapa_calor} />
           <ResumenLesiones s={res} />
           <ResumenOjeras s={res} />
+          <ResumenManchas s={res} />
         </Tarjeta>
       )}
     </Pantalla>

@@ -62,9 +62,9 @@ def reporte_evolucion_csv(
     audit.registrar(db, request, usuario, "reportes", "exportar_csv", entidad="paciente", entidad_id=pac.id)
     return respuesta_csv(
         f"Evolución colorimétrica - {pac.nombre} {pac.apellido} (CI {pac.cedula})",
-        ["Fecha", "Delta E promedio", "L* (nueva)", "a* (nueva)", "b* (nueva)", "Contraste ojeras (L*)", "Lesiones", "Lesiones nuevas",
+        ["Fecha", "Delta E promedio", "L* (nueva)", "a* (nueva)", "b* (nueva)", "Contraste ojeras (L*)", "Manchas (% de piel)", "Lesiones", "Lesiones nuevas",
          "SSIM sin alinear", "SSIM alineada", "Tiempo de procesamiento (ms)"],
-        [(s.fecha, s.delta_e_promedio, s.l_nueva, s.a_nueva, s.b_nueva, s.ojeras_contraste_nueva, s.lesiones_nueva, s.lesiones_nuevas,
+        [(s.fecha, s.delta_e_promedio, s.l_nueva, s.a_nueva, s.b_nueva, s.ojeras_contraste_nueva, s.manchas_pct_nueva, s.lesiones_nueva, s.lesiones_nuevas,
           s.ssim_antes, s.ssim_despues, s.tiempo_procesamiento_ms) for s in filas],
         filtros={"desde": desde, "hasta": hasta, "separador_decimal": decimal},
         totales={"Delta E promedio general": promedio} if promedio is not None else None,

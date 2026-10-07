@@ -28,6 +28,7 @@ from services import deteccion_acne
 from services.analisis_colorimetrico import _calcular_mascara_rostro
 from services.similitud import ssim
 from services.periorbital import analizar_periorbital, dibujar_regiones
+from services import manchas as manchas_svc
 from services.interpretacion import interpretar
 from services.procesamiento_imagenes import procesar_par_de_imagenes
 from services.suscripcion_service import exigir_acceso_avanzado
@@ -67,6 +68,9 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         ojeras_contraste_referencia=s.ojeras_contraste_referencia, ojeras_contraste_nueva=s.ojeras_contraste_nueva,
         ojeras_detalle=json.loads(s.ojeras_detalle) if s.ojeras_detalle else None,
         url_imagen_periorbital=f"/archivos/{s.ruta_imagen_periorbital}" if s.ruta_imagen_periorbital else None,
+        manchas_pct_referencia=s.manchas_pct_referencia, manchas_pct_nueva=s.manchas_pct_nueva,
+        manchas_detalle=json.loads(s.manchas_detalle) if s.manchas_detalle else None,
+        url_imagen_manchas=f"/archivos/{s.ruta_imagen_manchas}" if s.ruta_imagen_manchas else None,
         interpretacion=interpretar(s),
     )
 
@@ -124,6 +128,12 @@ def procesar_seguimiento(
         ojeras_ref = analizar_periorbital(ref_bgr, puntos_ref)
         ojeras_nueva = analizar_periorbital(resultado["imagen_alineada"], puntos_ref)
         imagen_ojeras = dibujar_regiones(resultado["imagen_alineada"], puntos_ref) if ojeras_nueva else None
+        # Manchas: la misma superficie de piel (de la referencia) en ambas fotos
+        piel = manchas_svc.mascara_piel(puntos_ref, alto, ancho)
+        manchas_ref = manchas_svc.detectar_manchas(ref_bgr, piel)
+        manchas_nueva = manchas_svc.detectar_manchas(resultado["imagen_alineada"], piel)
+        imagen_manchas = (manchas_svc.dibujar_comparacion(resultado["imagen_alineada"], piel, manchas_ref, manchas_nueva)
+                          if manchas_ref and manchas_nueva else None)
         # RF-14 / RF-15: detección y comparación de lesiones (si el modelo está instalado)
         lesiones = None
         if deteccion_acne.disponible():
@@ -144,6 +154,8 @@ def procesar_seguimiento(
         claves["lesiones"] = alm.nueva_clave()
     if imagen_ojeras is not None:
         claves["ojeras"] = alm.nueva_clave()
+    if imagen_manchas is not None:
+        claves["manchas"] = alm.nueva_clave()
     try:
         alm.guardar_imagen(ref_bgr, claves["ref"])
         alm.guardar_imagen(nueva_bgr, claves["nueva"])
@@ -153,6 +165,8 @@ def procesar_seguimiento(
             alm.guardar_imagen(lesiones["imagen"], claves["lesiones"])
         if imagen_ojeras is not None:
             alm.guardar_imagen(imagen_ojeras, claves["ojeras"])
+        if imagen_manchas is not None:
+            alm.guardar_imagen(imagen_manchas, claves["manchas"])
         seg = Seguimiento(
             paciente_id=paciente.id, usuario_id=usuario_actual.id, fecha=ahora(),
             ruta_imagen_referencia=claves["ref"], ruta_imagen_nueva=claves["nueva"],
@@ -175,6 +189,10 @@ def procesar_seguimiento(
             seg.ojeras_contraste_nueva = ojeras_nueva["contraste_L_promedio"]
             seg.ojeras_detalle = json.dumps({"referencia": ojeras_ref, "nueva": ojeras_nueva})
             seg.ruta_imagen_periorbital = claves["ojeras"]
+        if imagen_manchas is not None:
+            seg.manchas_pct_referencia, seg.manchas_pct_nueva = manchas_ref["area_pct"], manchas_nueva["area_pct"]
+            seg.manchas_detalle = json.dumps({"referencia": manchas_svc.resumen(manchas_ref), "nueva": manchas_svc.resumen(manchas_nueva)})
+            seg.ruta_imagen_manchas = claves["manchas"]
         db.add(seg)
         db.commit()
         db.refresh(seg)
@@ -227,6 +245,7 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
                 Seguimiento.ruta_imagen_referencia == clave, Seguimiento.ruta_imagen_nueva == clave,
                 Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
                 Seguimiento.ruta_imagen_lesiones == clave, Seguimiento.ruta_imagen_periorbital == clave,
+                Seguimiento.ruta_imagen_manchas == clave,
             ),
         )
         .first()

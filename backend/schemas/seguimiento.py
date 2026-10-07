@@ -36,4 +36,8 @@ class SeguimientoRespuesta(BaseModel):
     ojeras_contraste_nueva: Optional[float] = None
     ojeras_detalle: Optional[dict] = None
     url_imagen_periorbital: Optional[str] = None
+    manchas_pct_referencia: Optional[float] = None
+    manchas_pct_nueva: Optional[float] = None
+    manchas_detalle: Optional[dict] = None
+    url_imagen_manchas: Optional[str] = None
     interpretacion: Optional[dict] = None
