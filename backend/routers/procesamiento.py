@@ -21,6 +21,7 @@ from models.usuario import Usuario
 from routers.pacientes import consentimiento_vigente, obtener_paciente_propio
 from models.plantilla import PlantillaIndicacion
 from schemas.seguimiento import PlantillaNueva, PlantillaRespuesta, Recomendaciones, SeguimientoRespuesta
+from services import color_regiones as color_svc
 from services import porfirinas as porfirinas_svc
 from services.clinico import ValoracionClinica, normalizar as normalizar_valoracion
 from services.procesamiento_imagenes import detectar_landmarks
@@ -85,6 +86,9 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         porfirinas=json.loads(s.porfirinas) if s.porfirinas else None,
         url_imagen_uv=f"/archivos/{s.ruta_imagen_uv}" if s.ruta_imagen_uv else None,
         url_imagen_uv_analisis=f"/archivos/{s.ruta_imagen_uv_analisis}" if s.ruta_imagen_uv_analisis else None,
+        color_regiones=json.loads(s.color_regiones) if s.color_regiones else None,
+        url_mapa_rojez=f"/archivos/{s.ruta_mapa_rojez}" if s.ruta_mapa_rojez else None,
+        url_mapa_luminosidad=f"/archivos/{s.ruta_mapa_luminosidad}" if s.ruta_mapa_luminosidad else None,
         interpretacion=interpretar(s),
     )
 
@@ -137,6 +141,8 @@ def procesar_seguimiento(
         # RF-13: SSIM sin alinear (solo redimensionada) vs. alineada, sobre el rostro
         ssim_antes = ssim(ref_bgr, cv2.resize(nueva_bgr, (ancho, alto)), mascara)
         ssim_despues = ssim(ref_bgr, resultado["imagen_alineada"], mascara)
+        # Color por zona: qué componente cambió (luz, rojez, tono) y dónde
+        color_zonas = color_svc.analizar(ref_bgr, resultado["imagen_alineada"], resultado["puntos_referencia"], mascara)
         # RF-16: ojeras. La imagen alineada tiene la geometría de la referencia, así que se usan sus puntos.
         puntos_ref = resultado["puntos_referencia"]
         ojeras_ref = analizar_periorbital(ref_bgr, puntos_ref)
@@ -176,6 +182,7 @@ def procesar_seguimiento(
         claves["manchas"] = alm.nueva_clave()
     if imagen_textura is not None:
         claves["textura"] = alm.nueva_clave()
+    claves["rojez"], claves["luz"] = alm.nueva_clave(), alm.nueva_clave()
     try:
         alm.guardar_imagen(ref_bgr, claves["ref"])
         alm.guardar_imagen(nueva_bgr, claves["nueva"])
@@ -189,6 +196,8 @@ def procesar_seguimiento(
             alm.guardar_imagen(imagen_manchas, claves["manchas"])
         if imagen_textura is not None:
             alm.guardar_imagen(imagen_textura, claves["textura"])
+        alm.guardar_imagen(color_zonas["_mapa_rojez"], claves["rojez"])
+        alm.guardar_imagen(color_zonas["_mapa_luz"], claves["luz"])
         seg = Seguimiento(
             paciente_id=paciente.id, usuario_id=usuario_actual.id, fecha=ahora(),
             ruta_imagen_referencia=claves["ref"], ruta_imagen_nueva=claves["nueva"],
@@ -199,6 +208,8 @@ def procesar_seguimiento(
             l_nueva=analisis["l_nueva"], a_nueva=analisis["a_nueva"], b_nueva=analisis["b_nueva"],
             tiempo_procesamiento_ms=tiempo_ms,
             ssim_antes=round(ssim_antes, 4), ssim_despues=round(ssim_despues, 4),
+            color_regiones=json.dumps(color_svc.resumen(color_zonas)),
+            ruta_mapa_rojez=claves["rojez"], ruta_mapa_luminosidad=claves["luz"],
         )
         if lesiones:
             seg.lesiones_referencia, seg.lesiones_nueva = len(lesiones["referencia"]), len(lesiones["nueva"])
@@ -385,6 +396,7 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
                 Seguimiento.ruta_imagen_lesiones == clave, Seguimiento.ruta_imagen_periorbital == clave,
                 Seguimiento.ruta_imagen_manchas == clave, Seguimiento.ruta_imagen_textura == clave,
                 Seguimiento.ruta_imagen_uv == clave, Seguimiento.ruta_imagen_uv_analisis == clave,
+                Seguimiento.ruta_mapa_rojez == clave, Seguimiento.ruta_mapa_luminosidad == clave,
             ),
         )
         .first()

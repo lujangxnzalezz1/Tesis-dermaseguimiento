@@ -48,6 +48,9 @@ class SeguimientoRespuesta(BaseModel):
     porfirinas: Optional[dict] = None
     url_imagen_uv: Optional[str] = None
     url_imagen_uv_analisis: Optional[str] = None
+    color_regiones: Optional[dict] = None
+    url_mapa_rojez: Optional[str] = None
+    url_mapa_luminosidad: Optional[str] = None
     interpretacion: Optional[dict] = None
 
 

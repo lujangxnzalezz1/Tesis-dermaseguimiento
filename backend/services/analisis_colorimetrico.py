@@ -28,14 +28,14 @@ def _calcular_mascara_rostro(puntos, alto: int, ancho: int) -> np.ndarray:
     return mascara
 
 
-def _generar_mapa_calor(delta_e_mapa: np.ndarray, mascara: np.ndarray) -> np.ndarray:
-    """Genera una imagen coloreada (mapa de calor) donde el color indica
-    cuánto cambió el tono de piel en cada punto entre las dos capturas."""
+def _generar_mapa_calor(delta_e_mapa: np.ndarray, mascara: np.ndarray, base_bgr: np.ndarray) -> np.ndarray:
+    """Mapa de calor del cambio de color (azul = igual, rojo = cambio grande) dibujado ENCIMA de la foto de
+    hoy, solo dentro del rostro: así se ve en qué parte de la cara cambió."""
     recortado = np.clip(delta_e_mapa, 0, DELTA_E_MAXIMO_VISUAL)
     normalizado = (recortado / DELTA_E_MAXIMO_VISUAL * 255).astype(np.uint8)
-    mapa_color = cv2.applyColorMap(normalizado, cv2.COLORMAP_JET)
-    mapa_color[mascara == 0] = (40, 40, 40)
-    return mapa_color
+    mapa_color = cv2.applyColorMap(normalizado, cv2.COLORMAP_JET).astype(np.float32)
+    alfa = (0.55 * (mascara > 0))[..., None]
+    return (base_bgr * (1 - alfa) + mapa_color * alfa).astype(np.uint8)
 
 
 def analizar_color(imagen_referencia_bgr: np.ndarray, imagen_alineada_bgr: np.ndarray, puntos_referencia):
@@ -68,7 +68,7 @@ def analizar_color(imagen_referencia_bgr: np.ndarray, imagen_alineada_bgr: np.nd
         float(np.mean(lab_alineada[..., canal][indices_rostro])) for canal in range(3)
     )
 
-    mapa_calor = _generar_mapa_calor(delta_e_mapa, mascara)
+    mapa_calor = _generar_mapa_calor(delta_e_mapa, mascara, imagen_alineada_bgr)
 
     return {
         "exito": True,

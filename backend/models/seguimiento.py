@@ -74,5 +74,10 @@ class Seguimiento(Base):
     ruta_imagen_uv = Column(String, nullable=True)
     ruta_imagen_uv_analisis = Column(String, nullable=True)
 
+    # Cambio de color por zona (ΔL*, Δa*, Δb*) y mapas de rojez y de luz/pigmento
+    color_regiones = Column(Text, nullable=True)
+    ruta_mapa_rojez = Column(String, nullable=True)
+    ruta_mapa_luminosidad = Column(String, nullable=True)
+
     paciente = relationship("Paciente")
     usuario = relationship("Usuario")

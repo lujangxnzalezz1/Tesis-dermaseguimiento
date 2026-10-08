@@ -73,6 +73,11 @@ def test_seguimiento_incluye_manchas(client, doc):
     assert set(s["manchas_detalle"]) == {"referencia", "nueva"} and "mascara" not in s["manchas_detalle"]["nueva"]
     assert any("manchas" in f and "más superficie" in f for f in s["interpretacion"]["resumen"])
     assert client.get(s["url_imagen_manchas"], headers=doc).status_code == 200
+    zonas = s["color_regiones"]["zonas"]
+    assert {"frente", "mejilla_derecha", "mejilla_izquierda", "nariz", "menton"} <= set(zonas)
+    assert zonas["mejilla_derecha"]["color_referencia"].startswith("#") and "_mapa_rojez" not in s["color_regiones"]
+    assert client.get(s["url_mapa_rojez"], headers=doc).status_code == 200 and client.get(s["url_mapa_luminosidad"], headers=doc).status_code == 200
+    assert isinstance(s["interpretacion"]["causas_color"], list)
     csv = client.get(f"/pacientes/{p['id']}/reporte.csv", headers=doc).content.decode("utf-8-sig")
     assert "Manchas (% de piel)" in csv
 

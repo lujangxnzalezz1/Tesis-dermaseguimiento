@@ -7,6 +7,7 @@ perceptible, Sharma 2003) y son configurables; no están validados clínicamente
 import json
 
 from core.config import settings
+from services.color_regiones import causas as causas_color
 
 
 def _num(x: float) -> str:
@@ -119,8 +120,10 @@ def interpretar(seg) -> dict:
         frases.append("La alineación automática hizo las fotos comparables (la similitud estructural subió de "
                       f"{_num(seg.ssim_antes)} a {_num(seg.ssim_despues)}).")
 
+    cr = _textura(seg, "color_regiones")
     return {
         "magnitud_color": mag,
+        "causas_color": causas_color(cr) if cr else [],
         "resumen": frases,
         "advertencias": advertencias,
         "aclaracion": "Descripción automática de diferencias entre dos fotografías. No constituye diagnóstico; "

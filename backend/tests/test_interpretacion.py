@@ -64,3 +64,16 @@ def test_textura():
     assert "más líneas de expresión" in r and "más poros" in r and "más brillante" in r and "mismo lugar" in r
     r = " ".join(interpretar(seg(textura_referencia=t(5.0, None, 1.0), textura_nueva=t(5.5, None, 1.2)))["resumen"])
     assert "líneas de expresión" in r and "similares" in r and "poros" not in r and "brillante" not in r  # sin poros: no se menciona
+
+
+def test_causas_del_cambio_de_color():
+    from services.color_regiones import causas
+    zona = lambda n, dL, da, db, g: {"nombre": n, "dL": dL, "da": da, "db": db, "dL_local": dL - g[0], "da_local": da - g[1], "db_local": db - g[2]}  # noqa: E731
+    g = (-6.0, 0.0, 0.0)  # todo el rostro más oscuro y parejo → luz
+    c = causas({"global": {"dL": g[0], "da": g[1], "db": g[2]}, "zonas": {k: zona(k.title(), -6.2, 0, 0, g) for k in ("frente", "nariz", "menton")}})
+    assert any("luz" in x for x in c) and "no un diagnóstico" in c[-1]
+    g = (0.0, 0.5, 0.0)  # solo una mejilla más roja → cambio local
+    c = causas({"global": {"dL": 0, "da": 0.5, "db": 0}, "zonas": {
+        "mejilla_derecha": zona("Mejilla derecha", 0, 4.0, 0, g), "frente": zona("Frente", 0, 0.3, 0, g)}})
+    assert any(x.startswith("Mejilla derecha: más enrojecida") for x in c) and not any("Frente" in x for x in c)
+    assert causas({"global": {"dL": 0.2, "da": 0.1, "db": 0}, "zonas": {"frente": zona("Frente", 0.2, 0.1, 0, (0.2, 0.1, 0))}}) == []

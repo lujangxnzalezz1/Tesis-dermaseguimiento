@@ -375,7 +375,9 @@ type Capa = { clave: string; nombre: string; url: string; leyenda: string };
 /** Capas que se pueden dibujar sobre la foto de hoy: todas salen de los análisis del seguimiento. */
 function capasDe(s: any): Capa[] {
   const c: Capa[] = [{ clave: 'foto', nombre: 'Foto', url: s.url_imagen_alineada, leyenda: 'Foto de hoy, alineada con la de referencia.' }];
-  if (s.url_mapa_calor) c.push({ clave: 'color', nombre: 'Color', url: s.url_mapa_calor, leyenda: 'Cambio de color: azul = igual, verde/amarillo = cambio medio, rojo = cambio grande.' });
+  if (s.url_mapa_calor) c.push({ clave: 'color', nombre: 'Color', url: s.url_mapa_calor, leyenda: 'Diferencia de color ENTRE las dos fotos (no el color de una sola): azul = igual, amarillo = cambio medio, rojo = cambio grande.' });
+  if (s.url_mapa_rojez) c.push({ clave: 'rojez', nombre: 'Rojez', url: s.url_mapa_rojez, leyenda: 'Rojo = zona más enrojecida que en la referencia; verde azulado = menos enrojecida. Sin color = sin cambio.' });
+  if (s.url_mapa_luminosidad) c.push({ clave: 'luz', nombre: 'Luz y pigmento', url: s.url_mapa_luminosidad, leyenda: 'Marrón = zona más oscura que en la referencia; blanco = más clara. Muestra solo cambios locales (el cambio parejo de luz se explica abajo).' });
   if (s.url_imagen_manchas) c.push({ clave: 'manchas', nombre: 'Manchas', url: s.url_imagen_manchas, leyenda: 'Manchas: celeste = en la referencia, naranja = hoy.' });
   if (s.url_imagen_lesiones) c.push({ clave: 'lesiones', nombre: 'Lesiones', url: s.url_imagen_lesiones, leyenda: 'Lesiones: rojo = nuevas, verde = persisten, amarillo punteado = ya no aparecen.' });
   if (s.url_imagen_textura) c.push({ clave: 'textura', nombre: 'Textura', url: s.url_imagen_textura, leyenda: 'Textura: líneas en naranja, poros en celeste, brillo en blanco.' });
@@ -448,6 +450,7 @@ export function ComparadorAntesDespues({ s, alto = 340 }: { s: any; alto?: numbe
         })}
       </ScrollView>
       <Text style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave, lineHeight: 17 }}>{actual.leyenda}</Text>
+      {['color', 'rojez', 'luz'].includes(actual.clave) && <ColorPorZona s={s} />}
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
         <Text style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave, flex: 1 }}>
           {parpadeo ? 'Alternando antes y después: mirá qué cambia.' : 'Deslizá sobre la foto para comparar.'}
@@ -624,3 +627,52 @@ export function ResumenTextura({ s }: { s: any }) {
   );
 }
 
+
+/** Tono de la piel por zona (referencia → hoy), qué cambió en cada una y posibles explicaciones generales. */
+function ColorPorZona({ s }: { s: any }) {
+  const cr = s.color_regiones;
+  if (!cr?.zonas) return null;
+  const zonas: any[] = Object.values(cr.zonas);
+  const etiquetas = (z: any) => {
+    const e: string[] = [];
+    if (z.da_local >= 2) e.push('más roja'); else if (z.da_local <= -2) e.push('menos roja');
+    if (z.dL_local <= -2) e.push('más oscura'); else if (z.dL_local >= 2) e.push('más clara');
+    if (z.db_local >= 2) e.push('más amarilla'); else if (z.db_local <= -2) e.push('menos amarilla');
+    return e;
+  };
+  const causas: string[] = s.interpretacion?.causas_color ?? [];
+  return (
+    <View style={{ marginTop: 12, gap: 8 }}>
+      <Text style={{ fontFamily: FUENTE.titulo, fontSize: 15, color: COLOR.texto }}>Tono por zona</Text>
+      {zonas.map((z) => {
+        const e = etiquetas(z);
+        return (
+          <View key={z.nombre} style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Text style={{ fontFamily: FUENTE.textoFuerte, fontSize: 13, color: COLOR.texto, width: 112 }}>{z.nombre}</Text>
+            <View accessibilityLabel={`Tono en la referencia de ${z.nombre}`} style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: z.color_referencia, borderWidth: 1, borderColor: '#0001' }} />
+            <Ionicons name="arrow-forward" size={14} color={COLOR.textoSuave} />
+            <View accessibilityLabel={`Tono hoy de ${z.nombre}`} style={{ width: 28, height: 28, borderRadius: 9, backgroundColor: z.color_nueva, borderWidth: 1, borderColor: '#0001' }} />
+            <Text style={{ fontFamily: e.length ? FUENTE.textoFuerte : FUENTE.texto, fontSize: 12, color: e.length ? COLOR.aviso : COLOR.textoSuave, flex: 1 }}>
+              {e.length ? e.join(' · ') : 'sin cambio propio'}
+            </Text>
+          </View>
+        );
+      })}
+      <Text style={{ fontFamily: FUENTE.texto, fontSize: 11, color: COLOR.textoSuave }}>
+        Cuadrito izquierdo = tono promedio en la referencia; derecho = hoy. «Sin cambio propio» significa que la zona cambió igual que el resto del rostro.
+      </Text>
+      {causas.length > 0 && (
+        <View style={{ backgroundColor: COLOR.fondo, borderRadius: 18, padding: 14, marginTop: 4, gap: 6 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Ionicons name="help-circle-outline" size={18} color={COLOR.primario} />
+            <Text style={{ fontFamily: FUENTE.titulo, fontSize: 15, color: COLOR.texto }}>Por qué pudo cambiar</Text>
+          </View>
+          {causas.map((c, i) => (
+            <Text key={i} style={{ fontFamily: i === causas.length - 1 ? FUENTE.textoMedio : FUENTE.texto, fontSize: 13, lineHeight: 19,
+              color: i === causas.length - 1 ? COLOR.textoSuave : COLOR.texto }}>{i === causas.length - 1 ? c : `• ${c}`}</Text>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
