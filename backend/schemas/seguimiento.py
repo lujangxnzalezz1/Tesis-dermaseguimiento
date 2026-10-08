@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SeguimientoRespuesta(BaseModel):
@@ -40,4 +40,12 @@ class SeguimientoRespuesta(BaseModel):
     manchas_pct_nueva: Optional[float] = None
     manchas_detalle: Optional[dict] = None
     url_imagen_manchas: Optional[str] = None
+    textura_referencia: Optional[dict] = None
+    textura_nueva: Optional[dict] = None
+    url_imagen_textura: Optional[str] = None
+    recomendaciones: Optional[str] = None
     interpretacion: Optional[dict] = None
+
+
+class Recomendaciones(BaseModel):
+    texto: str = Field("", max_length=2000)

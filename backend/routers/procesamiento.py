@@ -19,7 +19,7 @@ from models.paciente import Paciente
 from models.seguimiento import Seguimiento
 from models.usuario import Usuario
 from routers.pacientes import consentimiento_vigente, obtener_paciente_propio
-from schemas.seguimiento import SeguimientoRespuesta
+from schemas.seguimiento import Recomendaciones, SeguimientoRespuesta
 from services import almacenamiento as alm
 from services import auditoria_service as audit
 from services.analisis_colorimetrico import analizar_color
@@ -29,6 +29,7 @@ from services.analisis_colorimetrico import _calcular_mascara_rostro
 from services.similitud import ssim
 from services.periorbital import analizar_periorbital, dibujar_regiones
 from services import manchas as manchas_svc
+from services import textura as textura_svc
 from services.interpretacion import interpretar
 from services.informe_pdf import generar_informe
 from services.procesamiento_imagenes import procesar_par_de_imagenes
@@ -72,6 +73,10 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         manchas_pct_referencia=s.manchas_pct_referencia, manchas_pct_nueva=s.manchas_pct_nueva,
         manchas_detalle=json.loads(s.manchas_detalle) if s.manchas_detalle else None,
         url_imagen_manchas=f"/archivos/{s.ruta_imagen_manchas}" if s.ruta_imagen_manchas else None,
+        textura_referencia=json.loads(s.textura_referencia) if s.textura_referencia else None,
+        textura_nueva=json.loads(s.textura_nueva) if s.textura_nueva else None,
+        url_imagen_textura=f"/archivos/{s.ruta_imagen_textura}" if s.ruta_imagen_textura else None,
+        recomendaciones=s.recomendaciones,
         interpretacion=interpretar(s),
     )
 
@@ -135,6 +140,10 @@ def procesar_seguimiento(
         manchas_nueva = manchas_svc.detectar_manchas(resultado["imagen_alineada"], piel)
         imagen_manchas = (manchas_svc.dibujar_comparacion(resultado["imagen_alineada"], piel, manchas_ref, manchas_nueva)
                           if manchas_ref and manchas_nueva else None)
+        # Textura: líneas, poros y brillo, en las mismas zonas (de la referencia) en ambas fotos
+        textura_ref = textura_svc.analizar(ref_bgr, puntos_ref)
+        textura_nueva = textura_svc.analizar(resultado["imagen_alineada"], puntos_ref)
+        imagen_textura = textura_svc.dibujar(resultado["imagen_alineada"], puntos_ref, textura_nueva) if textura_ref and textura_nueva else None
         # RF-14 / RF-15: detección y comparación de lesiones (si el modelo está instalado)
         lesiones = None
         if deteccion_acne.disponible():
@@ -157,6 +166,8 @@ def procesar_seguimiento(
         claves["ojeras"] = alm.nueva_clave()
     if imagen_manchas is not None:
         claves["manchas"] = alm.nueva_clave()
+    if imagen_textura is not None:
+        claves["textura"] = alm.nueva_clave()
     try:
         alm.guardar_imagen(ref_bgr, claves["ref"])
         alm.guardar_imagen(nueva_bgr, claves["nueva"])
@@ -168,6 +179,8 @@ def procesar_seguimiento(
             alm.guardar_imagen(imagen_ojeras, claves["ojeras"])
         if imagen_manchas is not None:
             alm.guardar_imagen(imagen_manchas, claves["manchas"])
+        if imagen_textura is not None:
+            alm.guardar_imagen(imagen_textura, claves["textura"])
         seg = Seguimiento(
             paciente_id=paciente.id, usuario_id=usuario_actual.id, fecha=ahora(),
             ruta_imagen_referencia=claves["ref"], ruta_imagen_nueva=claves["nueva"],
@@ -194,6 +207,10 @@ def procesar_seguimiento(
             seg.manchas_pct_referencia, seg.manchas_pct_nueva = manchas_ref["area_pct"], manchas_nueva["area_pct"]
             seg.manchas_detalle = json.dumps({"referencia": manchas_svc.resumen(manchas_ref), "nueva": manchas_svc.resumen(manchas_nueva)})
             seg.ruta_imagen_manchas = claves["manchas"]
+        if imagen_textura is not None:
+            seg.textura_referencia = json.dumps(textura_svc.resumen(textura_ref))
+            seg.textura_nueva = json.dumps(textura_svc.resumen(textura_nueva))
+            seg.ruta_imagen_textura = claves["textura"]
         db.add(seg)
         db.commit()
         db.refresh(seg)
@@ -234,6 +251,22 @@ def listar_seguimientos(
     return [_a_respuesta(s) for s in filas]
 
 
+@router.put("/seguimientos/{seguimiento_id}/recomendaciones", response_model=SeguimientoRespuesta)
+def guardar_recomendaciones(seguimiento_id: int, datos: Recomendaciones, request: Request, db: Session = Depends(get_db),
+                            usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Indicaciones del profesional para el paciente; salen en el informe PDF. Texto vacío = se borran."""
+    seg = (db.query(Seguimiento).join(Paciente, Paciente.id == Seguimiento.paciente_id)
+           .filter(Seguimiento.id == seguimiento_id, Paciente.dermatologo_id == usuario_actual.id).first())
+    if not seg:
+        raise HTTPException(404, "No encontramos ese seguimiento o no tenés permiso para verlo.")
+    antes = seg.recomendaciones
+    seg.recomendaciones = datos.texto.strip() or None
+    db.commit()
+    audit.registrar(db, request, usuario_actual, "seguimientos", "recomendaciones", entidad="seguimiento", entidad_id=seg.id,
+                    antes={"largo": len(antes or "")}, despues={"largo": len(seg.recomendaciones or "")})
+    return _a_respuesta(seg)
+
+
 @router.get("/seguimientos/{seguimiento_id}/informe.pdf")
 def informe_pdf(seguimiento_id: int, request: Request, db: Session = Depends(get_db),
                 usuario_actual: Usuario = Depends(obtener_usuario_actual)):
@@ -262,7 +295,7 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
                 Seguimiento.ruta_imagen_referencia == clave, Seguimiento.ruta_imagen_nueva == clave,
                 Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
                 Seguimiento.ruta_imagen_lesiones == clave, Seguimiento.ruta_imagen_periorbital == clave,
-                Seguimiento.ruta_imagen_manchas == clave,
+                Seguimiento.ruta_imagen_manchas == clave, Seguimiento.ruta_imagen_textura == clave,
             ),
         )
         .first()

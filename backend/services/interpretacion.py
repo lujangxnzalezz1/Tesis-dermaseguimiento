@@ -4,6 +4,8 @@ Solo describe cambios observables entre dos fotografías; NO interpreta clínica
 Los umbrales de magnitud provienen de la percepción del color (CIE76: ~2,3 = diferencia mínima
 perceptible, Sharma 2003) y son configurables; no están validados clínicamente.
 """
+import json
+
 from core.config import settings
 
 
@@ -20,6 +22,13 @@ def _magnitud(delta_e: float) -> str:
     if delta_e < s.INTERP_DELTA_E_MARCADO:
         return "moderado"
     return "marcado"
+
+
+def _textura(seg, campo):
+    v = getattr(seg, campo, None)
+    if v is None:
+        return None
+    return json.loads(v) if isinstance(v, str) else v
 
 
 def interpretar(seg) -> dict:
@@ -84,6 +93,27 @@ def interpretar(seg) -> dict:
         else:
             frases.append(f"Las zonas más oscuras que la piel de alrededor (manchas) ocupan {'más' if d > 0 else 'menos'} "
                           f"superficie que en la referencia ({cifras}).")
+
+    tr, tn = _textura(seg, "textura_referencia"), _textura(seg, "textura_nueva")
+    if tr and tn:
+        if tr.get("lineas_mm_cm2") is not None and tn.get("lineas_mm_cm2") is not None:
+            d = tn["lineas_mm_cm2"] - tr["lineas_mm_cm2"]
+            if abs(d) < s.INTERP_UMBRAL_LINEAS:
+                frases.append("Las líneas de expresión (frente, entrecejo y contorno de los ojos) se ven similares a la referencia.")
+            else:
+                frases.append(f"Se marcan {'más' if d > 0 else 'menos'} líneas de expresión que en la referencia "
+                              f"({_num(tr['lineas_mm_cm2'])} → {_num(tn['lineas_mm_cm2'])} mm de línea por cm²).")
+        if tr.get("poros_cm2") is not None and tn.get("poros_cm2") is not None:
+            d = tn["poros_cm2"] - tr["poros_cm2"]
+            if abs(d) >= s.INTERP_UMBRAL_POROS:
+                frases.append(f"Se ven {'más' if d > 0 else 'menos'} poros en las mejillas ({_num(tr['poros_cm2'])} → {_num(tn['poros_cm2'])} por cm²).")
+            else:
+                frases.append("La cantidad de poros visibles en las mejillas es similar a la referencia.")
+        if tr.get("brillo_pct") is not None and tn.get("brillo_pct") is not None:
+            d = tn["brillo_pct"] - tr["brillo_pct"]
+            if abs(d) >= s.INTERP_UMBRAL_BRILLO:
+                frases.append(f"La zona T se ve {'más' if d > 0 else 'menos'} brillante ({_num(tr['brillo_pct'])} % → {_num(tn['brillo_pct'])} %). "
+                              "El brillo depende mucho de la luz: compará solo fotos tomadas en el mismo lugar.")
 
     if seg.ssim_antes is not None and seg.ssim_despues is not None and seg.ssim_despues > seg.ssim_antes:
         frases.append("La alineación automática hizo las fotos comparables (la similitud estructural subió de "

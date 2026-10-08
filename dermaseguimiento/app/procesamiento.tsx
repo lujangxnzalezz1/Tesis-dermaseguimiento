@@ -3,7 +3,7 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, Text, View } from 'react-native';
 import { avisar, elegirOrigenFoto } from '../lib/dialogo';
-import { Aviso, Boton, BotonInforme, ComparadorAntesDespues, ImagenProtegida, Indicadores, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo, COLOR } from '../components/ui';
+import { Aviso, Boton, BotonInforme, ComparadorAntesDespues, ImagenProtegida, Indicadores, Pantalla, Interpretacion, Recomendaciones, ResumenLesiones, ResumenManchas, ResumenTextura, ResumenOjeras, Subtitulo, Tarjeta, Titulo, COLOR } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { tomarFotoPendiente } from '../lib/capturaStore';
 
@@ -133,6 +133,7 @@ export default function ProcesamientoScreen() {
           <ComparadorAntesDespues urlReferencia={res.url_imagen_referencia} urlActual={res.url_imagen_alineada} />
           <Interpretacion s={res} />
           <Indicadores s={res} />
+          <Recomendaciones seguimientoId={res.id} inicial={res.recomendaciones} />
           <BotonInforme seguimientoId={res.id} />
         <Tarjeta>
           <Subtitulo>Detalle técnico</Subtitulo>
@@ -145,6 +146,7 @@ export default function ProcesamientoScreen() {
           <ResumenLesiones s={res} />
           <ResumenOjeras s={res} />
           <ResumenManchas s={res} />
+          <ResumenTextura s={res} />
         </Tarjeta>
         </View>
       )}

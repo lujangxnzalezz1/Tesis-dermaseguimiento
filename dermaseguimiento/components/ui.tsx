@@ -414,6 +414,10 @@ export function Indicadores({ s }: { s: any }) {
   ];
   if (s.manchas_pct_nueva != null) items.push({ nombre: 'Manchas', valor: `${num(s.manchas_pct_nueva)} %`, fraccion: s.manchas_pct_nueva / 5, detalle: `Antes ${num(s.manchas_pct_referencia, 2)} % de la piel` });
   if (s.ojeras_contraste_nueva != null) items.push({ nombre: 'Ojeras', valor: num(s.ojeras_contraste_nueva), fraccion: s.ojeras_contraste_nueva / 30, detalle: `Antes ${num(s.ojeras_contraste_referencia)} (contraste)` });
+  const tr = s.textura_referencia, tn = s.textura_nueva;
+  if (tn?.lineas_mm_cm2 != null && tr?.lineas_mm_cm2 != null) items.push({ nombre: 'Líneas', valor: num(tn.lineas_mm_cm2), fraccion: tn.lineas_mm_cm2 / 20, detalle: `mm por cm² · antes ${num(tr.lineas_mm_cm2)}` });
+  if (tn?.poros_cm2 != null && tr?.poros_cm2 != null) items.push({ nombre: 'Poros', valor: num(tn.poros_cm2, 0), fraccion: tn.poros_cm2 / 60, detalle: `por cm² en mejillas · antes ${num(tr.poros_cm2, 0)}` });
+  if (tn?.brillo_pct != null && tr?.brillo_pct != null) items.push({ nombre: 'Brillo', valor: `${num(tn.brillo_pct)} %`, fraccion: tn.brillo_pct / 15, detalle: `de la zona T · antes ${num(tr.brillo_pct)} %` });
   if (s.lesiones_nueva != null) items.push({ nombre: 'Lesiones', valor: String(s.lesiones_nueva), fraccion: s.lesiones_nueva / 10, detalle: `${s.lesiones_nuevas} nuevas · ${s.lesiones_resueltas} ya no aparecen` });
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
@@ -433,6 +437,9 @@ const SERIES: Serie[] = [
   { clave: 'manchas', nombre: 'Manchas', titulo: 'Superficie con manchas', valor: (s) => s.manchas_pct_nueva, fmt: (v) => `${num(v, 2)} %` },
   { clave: 'color', nombre: 'Color', titulo: 'Cambio de color (Delta E)', valor: (s) => s.delta_e_promedio, fmt: (v) => num(v) },
   { clave: 'ojeras', nombre: 'Ojeras', titulo: 'Contraste de ojeras', valor: (s) => s.ojeras_contraste_nueva, fmt: (v) => num(v) },
+  { clave: 'lineas', nombre: 'Líneas', titulo: 'Líneas de expresión (mm por cm²)', valor: (s) => s.textura_nueva?.lineas_mm_cm2 ?? null, fmt: (v) => num(v) },
+  { clave: 'poros', nombre: 'Poros', titulo: 'Poros visibles por cm²', valor: (s) => s.textura_nueva?.poros_cm2 ?? null, fmt: (v) => num(v, 0) },
+  { clave: 'brillo', nombre: 'Brillo', titulo: 'Brillo de la zona T', valor: (s) => s.textura_nueva?.brillo_pct ?? null, fmt: (v) => `${num(v)} %` },
   { clave: 'lesiones', nombre: 'Lesiones', titulo: 'Regiones con aspecto de lesión', valor: (s) => s.lesiones_nueva, fmt: (v) => String(v) },
 ];
 
@@ -455,17 +462,18 @@ export function GraficoEvolucion({ seguimientos }: { seguimientos: any[] }) {
   const corta = (f: Date) => f.toLocaleDateString('es-PY', { day: 'numeric', month: 'short' });
   return (
     <View style={{ marginTop: 12 }}>
-      <View accessibilityRole="tablist" style={{ flexDirection: 'row', gap: 6, backgroundColor: COLOR.tarjeta, borderRadius: 18, padding: 5 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityRole="tablist"
+        contentContainerStyle={{ gap: 6, padding: 5 }} style={{ backgroundColor: COLOR.tarjeta, borderRadius: 18, flexGrow: 0 }}>
         {disponibles.map((x) => {
           const activa = x.clave === serie.clave;
           return (
             <TouchableOpacity key={x.clave} accessibilityRole="tab" accessibilityState={{ selected: activa }} onPress={() => setSel(x.clave)}
-              style={{ flex: 1, minHeight: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: activa ? COLOR.primario : 'transparent' }}>
+              style={{ minHeight: 40, paddingHorizontal: 14, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: activa ? COLOR.primario : 'transparent' }}>
               <Text style={{ fontFamily: FUENTE.textoFuerte, fontSize: 13, color: activa ? COLOR.tarjeta : COLOR.primario }}>{x.nombre}</Text>
             </TouchableOpacity>
           );
         })}
-      </View>
+      </ScrollView>
       <View style={{ backgroundColor: COLOR.tarjeta, borderRadius: 26, padding: 18, marginTop: 10, ...SOMBRA }}>
         <Text style={{ fontFamily: FUENTE.texto, fontSize: 13, color: COLOR.textoSuave }}>{serie.titulo}</Text>
         <Text style={{ fontFamily: FUENTE.titulo, fontSize: 30, color: COLOR.texto, letterSpacing: -0.5 }}>{serie.fmt(datos[datos.length - 1].v)}</Text>
@@ -484,6 +492,70 @@ export function GraficoEvolucion({ seguimientos }: { seguimientos: any[] }) {
           {datos.map((d, i) => <Text key={i} style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave }}>{corta(d.fecha)}</Text>)}
         </View>
       </View>
+    </View>
+  );
+}
+
+/** Textura: líneas por zona, poros y brillo, con la imagen de las zonas analizadas. */
+export function ResumenTextura({ s }: { s: any }) {
+  const tr = s.textura_referencia, tn = s.textura_nueva;
+  if (!tn || !tr) return null;
+  const zona: Record<string, string> = { frente: 'Frente', entrecejo: 'Entrecejo', patas_de_gallo: 'Contorno de ojos' };
+  const v = (x: number | null | undefined, d = 1) => (x == null ? '—' : num(x, d));
+  return (
+    <View style={{ marginTop: 12 }}>
+      <Text style={{ fontSize: 17, fontFamily: FUENTE.titulo, color: COLOR.texto, marginBottom: 6 }}>Textura</Text>
+      {Object.keys(zona).map((k) => (
+        <Text key={k} style={{ fontFamily: FUENTE.texto, color: COLOR.texto }}>
+          Líneas en {zona[k].toLowerCase()}: {v(tr.lineas_por_zona?.[k])} → {v(tn.lineas_por_zona?.[k])} mm/cm²
+        </Text>
+      ))}
+      <Text style={{ fontFamily: FUENTE.texto, color: COLOR.texto }}>
+        Poros (mejillas): {tn.poros_cm2 == null ? 'la foto no tiene detalle suficiente; acercá más la cámara' : `${v(tr.poros_cm2, 0)} → ${v(tn.poros_cm2, 0)} por cm²`}
+      </Text>
+      <Text style={{ fontFamily: FUENTE.texto, color: COLOR.texto }}>Brillo de la zona T: {v(tr.brillo_pct)} % → {v(tn.brillo_pct)} %</Text>
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 6 }}>
+        <Text style={{ color: '#C76A00', fontFamily: FUENTE.textoFuerte }}>— Líneas</Text>
+        <Text style={{ color: '#1F8FB8', fontFamily: FUENTE.textoFuerte }}>● Poros</Text>
+        <Text style={{ color: COLOR.textoSuave, fontFamily: FUENTE.textoFuerte }}>▢ Zonas analizadas</Text>
+      </View>
+      {s.url_imagen_textura && <ImagenProtegida url={s.url_imagen_textura} />}
+      <Text style={{ color: COLOR.textoSuave, fontSize: 12, marginTop: 6, fontFamily: FUENTE.texto, lineHeight: 17 }}>
+        Índices para comparar consultas, no diagnóstico. La escala usa la distancia entre pupilas (63 mm promedio). Los poros se miden solo
+        si la foto tiene detalle suficiente; el brillo depende mucho de la luz.
+      </Text>
+    </View>
+  );
+}
+
+/** Indicaciones del profesional para el paciente: se guardan con el seguimiento y salen en el informe PDF. */
+export function Recomendaciones({ seguimientoId, inicial }: { seguimientoId: number; inicial?: string | null }) {
+  const [texto, setTexto] = useState(inicial ?? '');
+  const [guardado, setGuardado] = useState(inicial ?? '');
+  const [estado, setEstado] = useState<{ cargando?: boolean; error?: string; ok?: boolean }>({});
+  const guardar = async () => {
+    setEstado({ cargando: true });
+    try {
+      const r = await fetch(`${API_URL}/seguimientos/${seguimientoId}/recomendaciones`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${obtenerToken()}` }, body: JSON.stringify({ texto }),
+      });
+      if (!r.ok) return setEstado({ error: 'No pudimos guardar las indicaciones. Intentá de nuevo.' });
+      const d = await r.json();
+      setGuardado(d.recomendaciones ?? ''); setTexto(d.recomendaciones ?? ''); setEstado({ ok: true });
+    } catch {
+      setEstado({ error: 'No pudimos conectarnos con el servidor.' });
+    }
+  };
+  return (
+    <View style={{ backgroundColor: COLOR.tarjeta, borderRadius: 24, padding: 16, marginTop: 12, borderWidth: 1.5, borderColor: COLOR.dorado }}>
+      <Text style={{ fontFamily: FUENTE.titulo, fontSize: 16, color: COLOR.texto }}>Indicaciones para el paciente</Text>
+      <Text style={{ fontFamily: FUENTE.texto, fontSize: 13, color: COLOR.textoSuave, marginBottom: 8 }}>Las escribís vos; salen en el informe PDF.</Text>
+      <TextInput value={texto} onChangeText={(t) => { setTexto(t); setEstado({}); }} multiline maxLength={2000}
+        placeholder="Ej.: protector solar FPS 50 cada 3 horas; control en 30 días." placeholderTextColor="#8A968F" accessibilityLabel="Indicaciones para el paciente"
+        style={[estilos.input, { minHeight: 90, textAlignVertical: 'top' }]} />
+      {estado.error && <Text style={estilos.error}>{estado.error}</Text>}
+      <Boton texto={estado.ok && texto === guardado ? 'Guardado' : 'Guardar indicaciones'} icono={estado.ok && texto === guardado ? 'checkmark' : 'save-outline'}
+        variante="secundario" cargando={estado.cargando} deshabilitado={texto === guardado} onPress={guardar} estilo={{ marginTop: 10 }} />
     </View>
   );
 }

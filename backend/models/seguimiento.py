@@ -58,5 +58,13 @@ class Seguimiento(Base):
     manchas_detalle = Column(Text, nullable=True)  # JSON con cantidad y contraste de ambas consultas
     ruta_imagen_manchas = Column(String, nullable=True)
 
+    # Textura (líneas/arrugas, poros, brillo de la zona T): JSON con los índices de cada foto
+    textura_referencia = Column(Text, nullable=True)
+    textura_nueva = Column(Text, nullable=True)
+    ruta_imagen_textura = Column(String, nullable=True)
+
+    # Indicaciones que escribe el profesional para el paciente (salen en el informe PDF)
+    recomendaciones = Column(Text, nullable=True)
+
     paciente = relationship("Paciente")
     usuario = relationship("Usuario")

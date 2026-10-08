@@ -1,7 +1,7 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { Aviso, Boton, BotonInforme, COLOR, ComparadorAntesDespues, FUENTE, GraficoEvolucion, ImagenProtegida, Iniciales, Indicadores, Interpretacion, Pantalla, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta } from '../components/ui';
+import { Aviso, Boton, BotonInforme, COLOR, ComparadorAntesDespues, FUENTE, GraficoEvolucion, ImagenProtegida, Iniciales, Indicadores, Interpretacion, Pantalla, Recomendaciones, ResumenLesiones, ResumenManchas, ResumenTextura, ResumenOjeras, Subtitulo, Tarjeta } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { CampoFecha, hoyTexto } from '../components/CampoFecha';
 
@@ -79,6 +79,7 @@ export default function HistorialScreen() {
           <ComparadorAntesDespues urlReferencia={s.url_imagen_referencia} urlActual={s.url_imagen_alineada} alto={300} />
           <Interpretacion s={s} />
           <Indicadores s={s} />
+          <Recomendaciones seguimientoId={s.id} inicial={s.recomendaciones} />
           <BotonInforme seguimientoId={s.id} />
           <Boton texto={detalle.has(s.id) ? 'Ocultar detalle técnico' : 'Ver detalle técnico'} icono={detalle.has(s.id) ? 'chevron-up' : 'chevron-down'} variante="texto"
             onPress={() => setDetalle((d) => { const n = new Set(d); if (n.has(s.id)) n.delete(s.id); else n.add(s.id); return n; })} />
@@ -91,6 +92,7 @@ export default function HistorialScreen() {
               <ResumenLesiones s={s} />
               <ResumenOjeras s={s} />
               <ResumenManchas s={s} />
+              <ResumenTextura s={s} />
             </Tarjeta>
           )}
         </View>

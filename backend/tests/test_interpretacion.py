@@ -10,7 +10,7 @@ def seg(**kw):
     base = dict(delta_e_promedio=1.0, l_referencia=60, l_nueva=60, a_referencia=15, a_nueva=15, b_referencia=18, b_nueva=18,
                 lesiones_referencia=None, lesiones_nueva=None, lesiones_nuevas=None, lesiones_persistentes=None, lesiones_resueltas=None,
                 ojeras_contraste_referencia=None, ojeras_contraste_nueva=None, ssim_antes=None, ssim_despues=None,
-                manchas_pct_referencia=None, manchas_pct_nueva=None)
+                manchas_pct_referencia=None, manchas_pct_nueva=None, textura_referencia=None, textura_nueva=None)
     base.update(kw)
     return SimpleNamespace(**base)
 
@@ -56,3 +56,11 @@ def test_manchas():
     r = " ".join(interpretar(seg(manchas_pct_referencia=3.0, manchas_pct_nueva=1.0))["resumen"])
     assert "ocupan menos superficie" in r and "3,00 %" in r and "1,00 %" in r
     assert "ocupan más superficie" in " ".join(interpretar(seg(manchas_pct_referencia=1.0, manchas_pct_nueva=2.5))["resumen"])
+
+
+def test_textura():
+    t = lambda li, po, br: {"lineas_mm_cm2": li, "poros_cm2": po, "brillo_pct": br}  # noqa: E731
+    r = " ".join(interpretar(seg(textura_referencia=t(2.0, 20.0, 1.0), textura_nueva=t(8.0, 30.0, 4.0)))["resumen"])
+    assert "más líneas de expresión" in r and "más poros" in r and "más brillante" in r and "mismo lugar" in r
+    r = " ".join(interpretar(seg(textura_referencia=t(5.0, None, 1.0), textura_nueva=t(5.5, None, 1.2)))["resumen"])
+    assert "líneas de expresión" in r and "similares" in r and "poros" not in r and "brillante" not in r  # sin poros: no se menciona

@@ -85,6 +85,16 @@ class Settings(BaseSettings):
     MANCHAS_AREA_MIN: float = 0.0004    # área mínima de una mancha / área de piel analizada (descarta poros y ruido)
     MANCHAS_MARGEN_BORDE: float = 0.05  # borde del rostro que no se analiza (pelo, sombra del contorno)
 
+    # --- Textura: líneas/arrugas, poros y brillo de la zona T ---
+    TEXTURA_UMBRAL_FRANGI: float = 0.08       # respuesta mínima del filtro de Frangi para contar como línea
+    TEXTURA_LARGO_MIN_LINEA_MM: float = 3.0   # descarta marcas cortas (no son líneas)
+    TEXTURA_PX_POR_MM_POROS: float = 10.0     # detalle mínimo de la foto para medir poros
+    TEXTURA_UMBRAL_POROS: float = 0.04        # cuánto más oscuro (L* relativa) que su entorno debe ser un poro
+    TEXTURA_BRILLO_L_RELATIVO: float = 0.12   # reflejo: al menos 12 % más claro que la mediana de la zona T
+    INTERP_UMBRAL_LINEAS: float = 2.5         # cambio mínimo (mm/cm²) para describir más o menos líneas
+    INTERP_UMBRAL_POROS: float = 5.0          # cambio mínimo en poros por cm²
+    INTERP_UMBRAL_BRILLO: float = 1.0         # cambio mínimo en % de brillo de la zona T
+
     # --- Guía de captura (RF-03): umbrales del control de calidad de la foto ---
     CAPTURA_ANCHO_ROSTRO_MIN: float = 0.35   # ancho del rostro / ancho de la foto
     CAPTURA_ANCHO_ROSTRO_MAX: float = 0.80
