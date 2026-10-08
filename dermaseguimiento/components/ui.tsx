@@ -75,15 +75,29 @@ export function Boton({
 }
 
 export function Campo({ etiqueta, error, ayuda, ...props }: TextInputProps & { etiqueta: string; error?: string | null; ayuda?: string }) {
+  // Los campos de contraseña llevan un botón con un ojo para mostrar u ocultar lo escrito
+  const esClave = !!props.secureTextEntry;
+  const [visible, setVisible] = useState(false);
   return (
     <View style={{ marginBottom: 12 }}>
       <Text style={estilos.etiqueta}>{etiqueta}</Text>
-      <TextInput
-        placeholderTextColor="#8A968F"
-        accessibilityLabel={etiqueta}
-        {...props}
-        style={[estilos.input, error ? { borderColor: COLOR.error } : null, props.multiline ? { minHeight: 80, textAlignVertical: 'top' } : null]}
-      />
+      <View style={{ justifyContent: 'center' }}>
+        <TextInput
+          placeholderTextColor="#8A968F"
+          accessibilityLabel={etiqueta}
+          {...props}
+          secureTextEntry={esClave && !visible}
+          style={[estilos.input, error ? { borderColor: COLOR.error } : null, props.multiline ? { minHeight: 80, textAlignVertical: 'top' } : null,
+            esClave ? { paddingRight: 52 } : null]}
+        />
+        {esClave && (
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+            onPress={() => setVisible(!visible)} {...(Platform.OS === 'web' ? { title: visible ? 'Ocultar contraseña' : 'Mostrar contraseña' } as any : {})}
+            style={{ position: 'absolute', right: 4, width: 44, height: 44, alignItems: 'center', justifyContent: 'center' }}>
+            <Ionicons name={visible ? 'eye-off-outline' : 'eye-outline'} size={22} color={COLOR.textoSuave} />
+          </TouchableOpacity>
+        )}
+      </View>
       {ayuda && !error ? <Text style={estilos.ayuda}>{ayuda}</Text> : null}
       {error ? <Text style={estilos.error}>{error}</Text> : null}
     </View>
