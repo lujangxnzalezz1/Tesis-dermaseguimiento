@@ -91,7 +91,10 @@ class Settings(BaseSettings):
     TEXTURA_PX_POR_MM_POROS: float = 10.0     # detalle mínimo de la foto para medir poros
     TEXTURA_UMBRAL_POROS: float = 0.04        # cuánto más oscuro (L* relativa) que su entorno debe ser un poro
     TEXTURA_BRILLO_L_RELATIVO: float = 0.12   # reflejo: al menos 12 % más claro que la mediana de la zona T
-    INTERP_UMBRAL_LINEAS: float = 2.5         # cambio mínimo (mm/cm²) para describir más o menos líneas
+    UV_TONO_MAX: int = 22                     # fluorescencia de porfirinas: tono rojo-anaranjado (0-22 en OpenCV)
+    UV_SATURACION_MIN: int = 120
+    UV_RESALTE_MIN: int = 35                  # cuánto más brillante que su entorno (0-255)
+    INTERP_UMBRAL_LINEAS: float = 2.5        # cambio mínimo (mm/cm²) para describir más o menos líneas
     INTERP_UMBRAL_POROS: float = 5.0          # cambio mínimo en poros por cm²
     INTERP_UMBRAL_BRILLO: float = 1.0         # cambio mínimo en % de brillo de la zona T
 

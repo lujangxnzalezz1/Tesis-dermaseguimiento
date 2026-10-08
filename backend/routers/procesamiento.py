@@ -19,7 +19,11 @@ from models.paciente import Paciente
 from models.seguimiento import Seguimiento
 from models.usuario import Usuario
 from routers.pacientes import consentimiento_vigente, obtener_paciente_propio
-from schemas.seguimiento import Recomendaciones, SeguimientoRespuesta
+from models.plantilla import PlantillaIndicacion
+from schemas.seguimiento import PlantillaNueva, PlantillaRespuesta, Recomendaciones, SeguimientoRespuesta
+from services import porfirinas as porfirinas_svc
+from services.clinico import ValoracionClinica, normalizar as normalizar_valoracion
+from services.procesamiento_imagenes import detectar_landmarks
 from services import almacenamiento as alm
 from services import auditoria_service as audit
 from services.analisis_colorimetrico import analizar_color
@@ -77,6 +81,10 @@ def _a_respuesta(s: Seguimiento) -> SeguimientoRespuesta:
         textura_nueva=json.loads(s.textura_nueva) if s.textura_nueva else None,
         url_imagen_textura=f"/archivos/{s.ruta_imagen_textura}" if s.ruta_imagen_textura else None,
         recomendaciones=s.recomendaciones,
+        valoracion_clinica=json.loads(s.valoracion_clinica) if s.valoracion_clinica else None,
+        porfirinas=json.loads(s.porfirinas) if s.porfirinas else None,
+        url_imagen_uv=f"/archivos/{s.ruta_imagen_uv}" if s.ruta_imagen_uv else None,
+        url_imagen_uv_analisis=f"/archivos/{s.ruta_imagen_uv_analisis}" if s.ruta_imagen_uv_analisis else None,
         interpretacion=interpretar(s),
     )
 
@@ -251,6 +259,86 @@ def listar_seguimientos(
     return [_a_respuesta(s) for s in filas]
 
 
+def _seguimiento_propio(db: Session, usuario: Usuario, seguimiento_id: int) -> Seguimiento:
+    seg = (db.query(Seguimiento).join(Paciente, Paciente.id == Seguimiento.paciente_id)
+           .filter(Seguimiento.id == seguimiento_id, Paciente.dermatologo_id == usuario.id).first())
+    if not seg:
+        raise HTTPException(404, "No encontramos ese seguimiento o no tenés permiso para verlo.")
+    return seg
+
+
+@router.put("/seguimientos/{seguimiento_id}/valoracion", response_model=SeguimientoRespuesta)
+def guardar_valoracion(seguimiento_id: int, datos: ValoracionClinica, request: Request, db: Session = Depends(get_db),
+                       usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Escalas clínicas (IGA, mMASI) y mediciones con equipo externo que carga la profesional. Todo vacío = se borra."""
+    seg = _seguimiento_propio(db, usuario_actual, seguimiento_id)
+    valor = normalizar_valoracion(datos)
+    seg.valoracion_clinica = json.dumps(valor) if valor else None
+    db.commit()
+    audit.registrar(db, request, usuario_actual, "seguimientos", "valoracion_clinica", entidad="seguimiento", entidad_id=seg.id,
+                    despues={"campos": sorted(valor) if valor else []})
+    return _a_respuesta(seg)
+
+
+@router.post("/seguimientos/{seguimiento_id}/foto-uv", response_model=SeguimientoRespuesta)
+def subir_foto_uv(seguimiento_id: int, request: Request, imagen: UploadFile = File(...), db: Session = Depends(get_db),
+                  usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Foto con luz UV (lámpara de Wood): cuenta las porfirinas fluorescentes. Reemplaza una foto UV anterior."""
+    exigir_acceso_avanzado(db, usuario_actual)
+    seg = _seguimiento_propio(db, usuario_actual, seguimiento_id)
+    if not consentimiento_vigente(db, seg.paciente_id):
+        raise HTTPException(409, "Este paciente no tiene un consentimiento informado vigente.")
+    img, _ = alm.leer_imagen_validada(imagen, "foto con luz UV")
+    try:
+        r = porfirinas_svc.analizar(img, detectar_landmarks(img))
+        analisis = porfirinas_svc.dibujar(img, r)
+    except Exception:
+        log.exception("Falló el análisis de la foto UV")
+        raise HTTPException(500, "No pudimos analizar la foto con luz UV. Probá con otra foto.")
+    viejas = [c for c in (seg.ruta_imagen_uv, seg.ruta_imagen_uv_analisis) if c]
+    k_uv, k_an = alm.nueva_clave(), alm.nueva_clave()
+    try:
+        alm.guardar_imagen(img, k_uv)
+        alm.guardar_imagen(analisis, k_an)
+        seg.porfirinas = json.dumps(porfirinas_svc.resumen(r))
+        seg.ruta_imagen_uv, seg.ruta_imagen_uv_analisis = k_uv, k_an
+        db.commit()
+    except Exception:
+        db.rollback()
+        alm.borrar_silencioso([k_uv, k_an])
+        raise HTTPException(500, "No pudimos guardar la foto con luz UV. Intentá de nuevo.")
+    alm.borrar_silencioso(viejas)
+    audit.registrar(db, request, usuario_actual, "seguimientos", "foto_uv", entidad="seguimiento", entidad_id=seg.id,
+                    despues={"porfirinas": r["cantidad"]})
+    return _a_respuesta(seg)
+
+
+@router.get("/plantillas-indicaciones", response_model=list[PlantillaRespuesta])
+def listar_plantillas(db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    return db.query(PlantillaIndicacion).filter(PlantillaIndicacion.usuario_id == usuario_actual.id).order_by(PlantillaIndicacion.titulo).all()
+
+
+@router.post("/plantillas-indicaciones", response_model=PlantillaRespuesta, status_code=201)
+def crear_plantilla(datos: PlantillaNueva, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    if db.query(PlantillaIndicacion).filter(PlantillaIndicacion.usuario_id == usuario_actual.id).count() >= 50:
+        raise HTTPException(400, "Llegaste al máximo de 50 plantillas. Borrá alguna para crear otra.")
+    p = PlantillaIndicacion(usuario_id=usuario_actual.id, titulo=datos.titulo.strip(), texto=datos.texto.strip())
+    db.add(p)
+    db.commit()
+    db.refresh(p)
+    return p
+
+
+@router.delete("/plantillas-indicaciones/{plantilla_id}", status_code=204)
+def borrar_plantilla(plantilla_id: int, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    p = db.query(PlantillaIndicacion).filter(PlantillaIndicacion.id == plantilla_id, PlantillaIndicacion.usuario_id == usuario_actual.id).first()
+    if not p:
+        raise HTTPException(404, "No encontramos esa plantilla.")
+    db.delete(p)
+    db.commit()
+    return Response(status_code=204)
+
+
 @router.put("/seguimientos/{seguimiento_id}/recomendaciones", response_model=SeguimientoRespuesta)
 def guardar_recomendaciones(seguimiento_id: int, datos: Recomendaciones, request: Request, db: Session = Depends(get_db),
                             usuario_actual: Usuario = Depends(obtener_usuario_actual)):
@@ -296,6 +384,7 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
                 Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
                 Seguimiento.ruta_imagen_lesiones == clave, Seguimiento.ruta_imagen_periorbital == clave,
                 Seguimiento.ruta_imagen_manchas == clave, Seguimiento.ruta_imagen_textura == clave,
+                Seguimiento.ruta_imagen_uv == clave, Seguimiento.ruta_imagen_uv_analisis == clave,
             ),
         )
         .first()

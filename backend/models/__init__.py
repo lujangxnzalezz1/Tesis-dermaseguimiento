@@ -6,9 +6,10 @@ from models.suscripcion import (
     Plan, Suscripcion, HistorialSuscripcion, Pago, Comprobante, Notificacion,
 )
 from models.configuracion import ConfiguracionCorreo, PlantillaCorreo, RespuestaSUS
+from models.plantilla import PlantillaIndicacion
 
 __all__ = [
     "Usuario", "Sesion", "TokenRestablecimiento", "Paciente", "ConsentimientoPaciente",
     "Seguimiento", "Auditoria", "Plan", "Suscripcion", "HistorialSuscripcion", "Pago",
-    "Comprobante", "Notificacion", "ConfiguracionCorreo", "PlantillaCorreo", "RespuestaSUS",
+    "Comprobante", "Notificacion", "ConfiguracionCorreo", "PlantillaCorreo", "RespuestaSUS", "PlantillaIndicacion",
 ]

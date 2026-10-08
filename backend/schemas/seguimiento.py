@@ -44,8 +44,23 @@ class SeguimientoRespuesta(BaseModel):
     textura_nueva: Optional[dict] = None
     url_imagen_textura: Optional[str] = None
     recomendaciones: Optional[str] = None
+    valoracion_clinica: Optional[dict] = None
+    porfirinas: Optional[dict] = None
+    url_imagen_uv: Optional[str] = None
+    url_imagen_uv_analisis: Optional[str] = None
     interpretacion: Optional[dict] = None
 
 
 class Recomendaciones(BaseModel):
     texto: str = Field("", max_length=2000)
+
+
+class PlantillaNueva(BaseModel):
+    titulo: str = Field(..., min_length=1, max_length=60)
+    texto: str = Field(..., min_length=1, max_length=2000)
+
+
+class PlantillaRespuesta(BaseModel):
+    id: int
+    titulo: str
+    texto: str

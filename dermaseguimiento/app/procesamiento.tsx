@@ -3,7 +3,8 @@ import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { Image, Platform, Text, View } from 'react-native';
 import { avisar, elegirOrigenFoto } from '../lib/dialogo';
-import { Aviso, Boton, BotonInforme, ComparadorAntesDespues, ImagenProtegida, Indicadores, Pantalla, Interpretacion, Recomendaciones, ResumenLesiones, ResumenManchas, ResumenTextura, ResumenOjeras, Subtitulo, Tarjeta, Titulo, COLOR } from '../components/ui';
+import { Aviso, Boton, BotonInforme, ComparadorAntesDespues, ImagenProtegida, Indicadores, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenTextura, ResumenOjeras, Subtitulo, Tarjeta, Titulo, COLOR } from '../components/ui';
+import { FotoUV, Recomendaciones, ValoracionClinica } from '../components/clinico';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { tomarFotoPendiente } from '../lib/capturaStore';
 
@@ -133,6 +134,8 @@ export default function ProcesamientoScreen() {
           <ComparadorAntesDespues urlReferencia={res.url_imagen_referencia} urlActual={res.url_imagen_alineada} />
           <Interpretacion s={res} />
           <Indicadores s={res} />
+          <ValoracionClinica alGuardar={setRes} seguimientoId={res.id} inicial={res.valoracion_clinica} />
+          <FotoUV alGuardar={setRes} seguimientoId={res.id} s={res} />
           <Recomendaciones seguimientoId={res.id} inicial={res.recomendaciones} />
           <BotonInforme seguimientoId={res.id} />
         <Tarjeta>

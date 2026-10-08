@@ -1,7 +1,8 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
-import { Aviso, Boton, BotonInforme, COLOR, ComparadorAntesDespues, FUENTE, GraficoEvolucion, ImagenProtegida, Iniciales, Indicadores, Interpretacion, Pantalla, Recomendaciones, ResumenLesiones, ResumenManchas, ResumenTextura, ResumenOjeras, Subtitulo, Tarjeta } from '../components/ui';
+import { Aviso, Boton, BotonInforme, COLOR, ComparadorAntesDespues, FUENTE, GraficoEvolucion, ImagenProtegida, Iniciales, Indicadores, Interpretacion, Pantalla, ResumenLesiones, ResumenManchas, ResumenTextura, ResumenOjeras, Subtitulo, Tarjeta } from '../components/ui';
+import { FotoUV, Recomendaciones, ValoracionClinica } from '../components/clinico';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { CampoFecha, hoyTexto } from '../components/CampoFecha';
 
@@ -18,6 +19,7 @@ export default function HistorialScreen() {
   const [error, setError] = useState<string | null>(null);
   const [verFiltros, setVerFiltros] = useState(false);
   const [detalle, setDetalle] = useState<Set<number>>(new Set());
+  const actualizar = (nuevo: any) => setItems((xs) => xs.map((x) => (x.id === nuevo.id ? nuevo : x)));
   const pacienteActual = useRef(pacienteId);
   pacienteActual.current = pacienteId;
 
@@ -79,6 +81,8 @@ export default function HistorialScreen() {
           <ComparadorAntesDespues urlReferencia={s.url_imagen_referencia} urlActual={s.url_imagen_alineada} alto={300} />
           <Interpretacion s={s} />
           <Indicadores s={s} />
+          <ValoracionClinica alGuardar={actualizar} seguimientoId={s.id} inicial={s.valoracion_clinica} />
+          <FotoUV alGuardar={actualizar} seguimientoId={s.id} s={s} />
           <Recomendaciones seguimientoId={s.id} inicial={s.recomendaciones} />
           <BotonInforme seguimientoId={s.id} />
           <Boton texto={detalle.has(s.id) ? 'Ocultar detalle técnico' : 'Ver detalle técnico'} icono={detalle.has(s.id) ? 'chevron-up' : 'chevron-down'} variante="texto"

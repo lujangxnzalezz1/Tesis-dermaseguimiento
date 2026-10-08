@@ -65,6 +65,10 @@ def _indices(s) -> list[list[str]]:
         filas.append(["Poros visibles", f"{_num(tr['poros_cm2'], 1)} /cm²", f"{_num(tn['poros_cm2'], 1)} /cm²", "Mejillas"])
     if tn.get("brillo_pct") is not None and tr.get("brillo_pct") is not None:
         filas.append(["Brillo zona T", f"{_num(tr['brillo_pct'], 1)} %", f"{_num(tn['brillo_pct'], 1)} %", "Reflejo de la luz (grasa); depende de la iluminación"])
+    po = json.loads(s.porfirinas) if s.porfirinas else None
+    if po:
+        filas.append(["Porfirinas (foto UV)", "—", f"{_num(po['por_cm2'], 2)} /cm²" if po.get("por_cm2") is not None else f"{po['cantidad']} puntos",
+                      "Puntos fluorescentes bajo luz UV"])
     if s.lesiones_nueva is not None:
         filas.append(["Regiones con aspecto de lesión", str(s.lesiones_referencia), str(s.lesiones_nueva),
                       f"Nuevas: {s.lesiones_nuevas} · Ya no aparecen: {s.lesiones_resueltas}"])
@@ -122,12 +126,15 @@ def generar_informe(s, paciente, profesional) -> bytes:
     manchas = _imagen(s.ruta_imagen_manchas, ancho_extra)
     lesiones = _imagen(s.ruta_imagen_lesiones, ancho_extra)
     textura = _imagen(s.ruta_imagen_textura, ancho_extra)
+    uv = _imagen(s.ruta_imagen_uv_analisis, ancho_extra)
     if manchas:
         extras.append((manchas, "Manchas: celeste = referencia, naranja = esta consulta"))
     if lesiones:
         extras.append((lesiones, "Regiones con aspecto de lesión"))
     if textura:
         extras.append((textura, "Textura: líneas en naranja, poros en celeste, brillo en blanco"))
+    if uv:
+        extras.append((uv, "Foto con luz UV: porfirinas marcadas en amarillo"))
     if extras:
         filas_t = []
         for k in range(0, len(extras), 3):
@@ -138,6 +145,22 @@ def generar_informe(s, paciente, profesional) -> bytes:
         t = Table(filas_t, colWidths=[ancho_extra + 4 * mm] * 3)
         t.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("ALIGN", (0, 0), (-1, -1), "CENTER")]))
         e.append(KeepTogether([Paragraph("Detalle de las zonas analizadas", sub), t]))
+
+    vc = json.loads(s.valoracion_clinica) if s.valoracion_clinica else None
+    if vc:
+        filas_vc = [["Escala o medición", "Valor"]]
+        if "iga" in vc:
+            filas_vc.append(["IGA (acné, 0 a 4)", f"{vc['iga']} · {vc.get('iga_texto', '')}"])
+        if "mmasi" in vc:
+            filas_vc.append(["mMASI (melasma, 0 a 24)", _num(vc["mmasi"], 1)])
+        for clave, nombre in (("humedad", "Hidratación"), ("ph", "pH"), ("firmeza", "Firmeza / elasticidad")):
+            if clave in vc:
+                filas_vc.append([nombre, _num(vc[clave], 1)])
+        tvc = Table([[Paragraph(escape(c), normal) for c in f] for f in filas_vc], colWidths=[70 * mm, ANCHO_UTIL - 70 * mm])
+        tvc.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF0ED")),
+                                 ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#C0D3CA"))]))
+        nota = "Valores cargados por la profesional" + (f" (equipo: {escape(vc['equipo'])})" if vc.get("equipo") else "") + "; la app no los estima a partir de las fotos."
+        e.append(KeepTogether([Paragraph("Valoración clínica", sub), tvc, Paragraph(nota, pie)]))
 
     if s.recomendaciones:
         caja = Table([[Paragraph(escape(s.recomendaciones).replace("\n", "<br/>"), normal)]], colWidths=[ANCHO_UTIL])

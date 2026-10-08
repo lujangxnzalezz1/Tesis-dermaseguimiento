@@ -66,5 +66,13 @@ class Seguimiento(Base):
     # Indicaciones que escribe el profesional para el paciente (salen en el informe PDF)
     recomendaciones = Column(Text, nullable=True)
 
+    # Valoración clínica cargada por la profesional (IGA, mMASI, humedad, pH, firmeza): JSON
+    valoracion_clinica = Column(Text, nullable=True)
+
+    # Foto con luz UV (opcional) y conteo de porfirinas fluorescentes: JSON
+    porfirinas = Column(Text, nullable=True)
+    ruta_imagen_uv = Column(String, nullable=True)
+    ruta_imagen_uv_analisis = Column(String, nullable=True)
+
     paciente = relationship("Paciente")
     usuario = relationship("Usuario")

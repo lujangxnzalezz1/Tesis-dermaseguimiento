@@ -30,7 +30,7 @@ export const COLOR = {
 export const FUENTE = {
   titulo: 'Outfit_600SemiBold', tituloFuerte: 'Outfit_700Bold', texto: 'Figtree_400Regular', textoMedio: 'Figtree_500Medium', textoFuerte: 'Figtree_600SemiBold',
 };
-const SOMBRA = { shadowColor: '#2E6B4F', shadowOpacity: 0.08, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 2 };
+export const SOMBRA = { shadowColor: '#2E6B4F', shadowOpacity: 0.08, shadowRadius: 18, shadowOffset: { width: 0, height: 8 }, elevation: 2 };
 
 type IconName = ComponentProps<typeof Ionicons>['name'];
 
@@ -200,7 +200,7 @@ export function ImagenProtegida({ url, estilo }: { url: string; estilo?: StylePr
   return <Image source={source} style={[estilos.imagen, estilo]} resizeMode="contain" />;
 }
 
-const estilos = StyleSheet.create({
+export const estilos = StyleSheet.create({
   scroll: { flexGrow: 1, backgroundColor: COLOR.fondo, alignItems: 'center', overflow: 'hidden' },
   columna: { width: '100%', maxWidth: 640, paddingHorizontal: 20, paddingTop: 16, paddingBottom: 40 },
   boton: { borderRadius: 18, paddingVertical: 14, paddingHorizontal: 18, alignItems: 'center', justifyContent: 'center', minHeight: 52 },
@@ -405,7 +405,7 @@ function Anillo({ valor, fraccion }: { valor: string; fraccion: number }) {
   );
 }
 
-const num = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
+export const num = (v: number, d = 1) => v.toFixed(d).replace('.', ',');
 
 /** Indicadores en tarjetas con anillo. El anillo solo ilustra la magnitud; el número es el dato. */
 export function Indicadores({ s }: { s: any }) {
@@ -418,6 +418,9 @@ export function Indicadores({ s }: { s: any }) {
   if (tn?.lineas_mm_cm2 != null && tr?.lineas_mm_cm2 != null) items.push({ nombre: 'Líneas', valor: num(tn.lineas_mm_cm2), fraccion: tn.lineas_mm_cm2 / 20, detalle: `mm por cm² · antes ${num(tr.lineas_mm_cm2)}` });
   if (tn?.poros_cm2 != null && tr?.poros_cm2 != null) items.push({ nombre: 'Poros', valor: num(tn.poros_cm2, 0), fraccion: tn.poros_cm2 / 60, detalle: `por cm² en mejillas · antes ${num(tr.poros_cm2, 0)}` });
   if (tn?.brillo_pct != null && tr?.brillo_pct != null) items.push({ nombre: 'Brillo', valor: `${num(tn.brillo_pct)} %`, fraccion: tn.brillo_pct / 15, detalle: `de la zona T · antes ${num(tr.brillo_pct)} %` });
+  if (s.porfirinas) items.push({ nombre: 'Porfirinas', valor: s.porfirinas.por_cm2 != null ? num(s.porfirinas.por_cm2, 2) : String(s.porfirinas.cantidad), fraccion: (s.porfirinas.por_cm2 ?? 0) / 2, detalle: s.porfirinas.por_cm2 != null ? 'por cm² (foto con luz UV)' : 'puntos (foto con luz UV)' });
+  if (s.valoracion_clinica?.iga != null) items.push({ nombre: 'IGA', valor: String(s.valoracion_clinica.iga), fraccion: s.valoracion_clinica.iga / 4, detalle: `${s.valoracion_clinica.iga_texto} · cargado por vos` });
+  if (s.valoracion_clinica?.mmasi != null) items.push({ nombre: 'mMASI', valor: num(s.valoracion_clinica.mmasi), fraccion: s.valoracion_clinica.mmasi / 24, detalle: 'melasma, de 0 a 24 · cargado por vos' });
   if (s.lesiones_nueva != null) items.push({ nombre: 'Lesiones', valor: String(s.lesiones_nueva), fraccion: s.lesiones_nueva / 10, detalle: `${s.lesiones_nuevas} nuevas · ${s.lesiones_resueltas} ya no aparecen` });
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 12 }}>
@@ -440,6 +443,12 @@ const SERIES: Serie[] = [
   { clave: 'lineas', nombre: 'Líneas', titulo: 'Líneas de expresión (mm por cm²)', valor: (s) => s.textura_nueva?.lineas_mm_cm2 ?? null, fmt: (v) => num(v) },
   { clave: 'poros', nombre: 'Poros', titulo: 'Poros visibles por cm²', valor: (s) => s.textura_nueva?.poros_cm2 ?? null, fmt: (v) => num(v, 0) },
   { clave: 'brillo', nombre: 'Brillo', titulo: 'Brillo de la zona T', valor: (s) => s.textura_nueva?.brillo_pct ?? null, fmt: (v) => `${num(v)} %` },
+  { clave: 'porfirinas', nombre: 'Porfirinas', titulo: 'Porfirinas por cm² (luz UV)', valor: (s) => s.porfirinas?.por_cm2 ?? null, fmt: (v) => num(v, 2) },
+  { clave: 'iga', nombre: 'IGA', titulo: 'IGA · acné (0 a 4, cargado por la profesional)', valor: (s) => s.valoracion_clinica?.iga ?? null, fmt: (v) => String(Math.round(v * 10) / 10) },
+  { clave: 'mmasi', nombre: 'mMASI', titulo: 'mMASI · melasma (0 a 24, cargado por la profesional)', valor: (s) => s.valoracion_clinica?.mmasi ?? null, fmt: (v) => num(v) },
+  { clave: 'humedad', nombre: 'Hidratación', titulo: 'Hidratación (equipo de la profesional)', valor: (s) => s.valoracion_clinica?.humedad ?? null, fmt: (v) => num(v) },
+  { clave: 'ph', nombre: 'pH', titulo: 'pH (equipo de la profesional)', valor: (s) => s.valoracion_clinica?.ph ?? null, fmt: (v) => num(v) },
+  { clave: 'firmeza', nombre: 'Firmeza', titulo: 'Firmeza (equipo de la profesional)', valor: (s) => s.valoracion_clinica?.firmeza ?? null, fmt: (v) => num(v) },
   { clave: 'lesiones', nombre: 'Lesiones', titulo: 'Regiones con aspecto de lesión', valor: (s) => s.lesiones_nueva, fmt: (v) => String(v) },
 ];
 
@@ -453,11 +462,19 @@ export function GraficoEvolucion({ seguimientos }: { seguimientos: any[] }) {
   if (!serie || orden.length === 0) return null;
   const datos = orden.map((s) => ({ v: serie.valor(s), fecha: new Date(s.fecha) })).filter((d) => d.v != null) as { v: number; fecha: Date }[];
   const alto = 150, margen = 14;
-  const max = Math.max(...datos.map((d) => d.v), 0.0001);
-  const pts = datos.map((d, i) => ({
-    x: datos.length === 1 ? ancho / 2 : margen + (i * (ancho - 2 * margen)) / (datos.length - 1),
-    y: alto - 12 - (d.v / max) * (alto - 36),
-  }));
+  // Tendencia (solo para la profesional): recta de mínimos cuadrados de las últimas consultas, un paso adelante
+  const ult = datos.slice(-5);
+  let proyeccion: number | null = null;
+  if (ult.length >= 3) {
+    const n = ult.length, xs = ult.map((_, i) => i), mx = (n - 1) / 2, my = ult.reduce((a, d) => a + d.v, 0) / n;
+    const pend = xs.reduce((a, x, i) => a + (x - mx) * (ult[i].v - my), 0) / xs.reduce((a, x) => a + (x - mx) ** 2, 0);
+    proyeccion = Math.max(0, my + pend * (n - mx));
+  }
+  const pasos = datos.length - 1 + (proyeccion != null ? 1 : 0);
+  const max = Math.max(...datos.map((d) => d.v), proyeccion ?? 0, 0.0001);
+  const xDe = (i: number) => (pasos === 0 ? ancho / 2 : margen + (i * (ancho - 2 * margen)) / pasos);
+  const yDe = (v: number) => alto - 12 - (v / max) * (alto - 36);
+  const pts = datos.map((d, i) => ({ x: xDe(i), y: yDe(d.v) }));
   const linea = pts.map((p) => `${p.x},${p.y}`).join(' ');
   const corta = (f: Date) => f.toLocaleDateString('es-PY', { day: 'numeric', month: 'short' });
   return (
@@ -484,13 +501,25 @@ export function GraficoEvolucion({ seguimientos }: { seguimientos: any[] }) {
               {[0.25, 0.5, 0.75].map((f) => <Line key={f} x1={0} x2={ancho} y1={alto * f} y2={alto * f} stroke="#EDE7D9" strokeWidth={1} />)}
               {pts.length > 1 && <Polygon points={`${pts[0].x},${alto - 12} ${linea} ${pts[pts.length - 1].x},${alto - 12}`} fill={COLOR.suave} />}
               {pts.length > 1 && <Polyline points={linea} fill="none" stroke={COLOR.primario} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />}
+              {proyeccion != null && (
+                <Line x1={pts[pts.length - 1].x} y1={pts[pts.length - 1].y} x2={xDe(datos.length)} y2={yDe(proyeccion)}
+                  stroke={COLOR.dorado} strokeWidth={3} strokeDasharray="6 6" strokeLinecap="round" />
+              )}
+              {proyeccion != null && <Circle cx={xDe(datos.length)} cy={yDe(proyeccion)} r={6} fill={COLOR.tarjeta} stroke={COLOR.dorado} strokeWidth={3} strokeDasharray="3 3" />}
               {pts.map((p, i) => <Circle key={i} cx={p.x} cy={p.y} r={6} fill={COLOR.tarjeta} stroke={COLOR.primario} strokeWidth={3} />)}
             </Svg>
           )}
         </View>
         <View style={{ flexDirection: 'row', justifyContent: datos.length === 1 ? 'center' : 'space-between', marginTop: 4 }}>
           {datos.map((d, i) => <Text key={i} style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave }}>{corta(d.fecha)}</Text>)}
+          {proyeccion != null && <Text style={{ fontFamily: FUENTE.textoFuerte, fontSize: 12, color: '#8A6D2F' }}>Próxima</Text>}
         </View>
+        {proyeccion != null && (
+          <Text style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave, marginTop: 8, lineHeight: 17 }}>
+            Tendencia: si sigue como en las últimas {ult.length} consultas, en la próxima rondaría {serie.fmt(proyeccion)}. Es una proyección
+            matemática para orientarte, no un pronóstico clínico; no se incluye en el informe del paciente.
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -528,34 +557,3 @@ export function ResumenTextura({ s }: { s: any }) {
   );
 }
 
-/** Indicaciones del profesional para el paciente: se guardan con el seguimiento y salen en el informe PDF. */
-export function Recomendaciones({ seguimientoId, inicial }: { seguimientoId: number; inicial?: string | null }) {
-  const [texto, setTexto] = useState(inicial ?? '');
-  const [guardado, setGuardado] = useState(inicial ?? '');
-  const [estado, setEstado] = useState<{ cargando?: boolean; error?: string; ok?: boolean }>({});
-  const guardar = async () => {
-    setEstado({ cargando: true });
-    try {
-      const r = await fetch(`${API_URL}/seguimientos/${seguimientoId}/recomendaciones`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${obtenerToken()}` }, body: JSON.stringify({ texto }),
-      });
-      if (!r.ok) return setEstado({ error: 'No pudimos guardar las indicaciones. Intentá de nuevo.' });
-      const d = await r.json();
-      setGuardado(d.recomendaciones ?? ''); setTexto(d.recomendaciones ?? ''); setEstado({ ok: true });
-    } catch {
-      setEstado({ error: 'No pudimos conectarnos con el servidor.' });
-    }
-  };
-  return (
-    <View style={{ backgroundColor: COLOR.tarjeta, borderRadius: 24, padding: 16, marginTop: 12, borderWidth: 1.5, borderColor: COLOR.dorado }}>
-      <Text style={{ fontFamily: FUENTE.titulo, fontSize: 16, color: COLOR.texto }}>Indicaciones para el paciente</Text>
-      <Text style={{ fontFamily: FUENTE.texto, fontSize: 13, color: COLOR.textoSuave, marginBottom: 8 }}>Las escribís vos; salen en el informe PDF.</Text>
-      <TextInput value={texto} onChangeText={(t) => { setTexto(t); setEstado({}); }} multiline maxLength={2000}
-        placeholder="Ej.: protector solar FPS 50 cada 3 horas; control en 30 días." placeholderTextColor="#8A968F" accessibilityLabel="Indicaciones para el paciente"
-        style={[estilos.input, { minHeight: 90, textAlignVertical: 'top' }]} />
-      {estado.error && <Text style={estilos.error}>{estado.error}</Text>}
-      <Boton texto={estado.ok && texto === guardado ? 'Guardado' : 'Guardar indicaciones'} icono={estado.ok && texto === guardado ? 'checkmark' : 'save-outline'}
-        variante="secundario" cargando={estado.cargando} deshabilitado={texto === guardado} onPress={guardar} estilo={{ marginTop: 10 }} />
-    </View>
-  );
-}
