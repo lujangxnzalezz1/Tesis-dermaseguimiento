@@ -1,7 +1,8 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
-import { Aviso, Boton, Campo, Casilla, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Ionicons } from '@expo/vector-icons';
+import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Aviso, Boton, BotonIcono, Campo, Casilla, COLOR, Confirmar, Iniciales, Pantalla, Pildora, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
 import { api, cerrarSesion, mensaje } from '../lib/api';
 import { CampoFecha, haceAniosTexto, hoyTexto } from '../components/CampoFecha';
 
@@ -135,15 +136,18 @@ export default function PacientesScreen() {
 
   return (
     <Pantalla>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-        <Boton texto={noLeidas ? `Suscripción (${noLeidas})` : 'Suscripción'} icono="card-outline" variante="secundario" onPress={() => router.push('/suscripcion')} estilo={{ flexGrow: 1 }} />
-        <Boton texto="Mi cuenta" icono="person-circle-outline" variante="secundario" onPress={() => router.push('/cuenta')} estilo={{ flexGrow: 1 }} />
-        {perfil?.rol === 'admin' && <Boton texto="Administración" icono="settings-outline" variante="secundario" onPress={() => router.push('/admin')} estilo={{ flexGrow: 1 }} />}
-        <Boton texto="Cerrar sesión" icono="log-out-outline" variante="texto" onPress={cerrarSesion} estilo={{ flexGrow: 1 }} />
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <View style={{ flex: 1 }}>
+          <Text style={{ fontFamily: FUENTE.texto, fontSize: 14, color: COLOR.textoSuave }}>Hola,</Text>
+          <Text style={{ fontFamily: FUENTE.titulo, fontSize: 26, color: COLOR.texto, letterSpacing: -0.3 }} numberOfLines={1}>{perfil?.nombre ?? ' '}</Text>
+        </View>
+        <BotonIcono icono="card-outline" etiqueta={noLeidas ? `Suscripción, ${noLeidas} avisos` : 'Suscripción'} marca={noLeidas > 0} onPress={() => router.push('/suscripcion')} />
+        <BotonIcono icono="person-circle-outline" etiqueta="Mi cuenta" onPress={() => router.push('/cuenta')} />
+        {perfil?.rol === 'admin' && <BotonIcono icono="settings-outline" etiqueta="Administración" onPress={() => router.push('/admin')} />}
+        <BotonIcono icono="log-out-outline" etiqueta="Cerrar sesión" onPress={cerrarSesion} />
       </View>
-      {perfil && <Text style={{ color: '#666', marginBottom: 4 }}>Hola, {perfil.nombre}</Text>}
       {susc?.dias_restantes != null && susc.estado !== 'vencida' && susc.plan.periodicidad !== 'gratuito' && (
-        <Text style={{ color: '#444', marginBottom: 4 }}>
+        <Text style={{ color: COLOR.textoSuave, marginBottom: 4 }}>
           {susc.es_prueba ? 'Período de prueba' : `Plan ${susc.plan.nombre}`}: vence el {new Date(susc.fecha_vencimiento + 'Z').toLocaleDateString('es-PY')} ({susc.dias_restantes} días)
         </Text>
       )}
@@ -153,31 +157,46 @@ export default function PacientesScreen() {
 
       {modo === 'lista' ? (
         <>
-          <Titulo>Pacientes</Titulo>
-          <Campo etiqueta="Buscar por cédula, nombre o apellido" value={q} onChangeText={setQ} onSubmitEditing={() => cargarLista(1)} returnKeyType="search" maxLength={80} />
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            <Boton texto="Buscar" icono="search" onPress={() => cargarLista(1)} estilo={{ flex: 1 }} cargando={cargando && pagina === 1} />
-            <Boton texto="Paciente nuevo" icono="person-add" variante="secundario" onPress={abrirNuevo} estilo={{ flex: 1 }} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+            <Titulo>Pacientes</Titulo>
+            <Boton texto="Nuevo" icono="person-add-outline" onPress={abrirNuevo} estilo={{ minHeight: 44, paddingVertical: 10, marginBottom: 8 }} />
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: COLOR.tarjeta, borderRadius: 18, paddingLeft: 16, paddingRight: 6, marginBottom: 8 }}>
+            <Ionicons name="search" size={20} color={COLOR.textoSuave} />
+            <TextInput value={q} onChangeText={setQ} onSubmitEditing={() => cargarLista(1)} returnKeyType="search" maxLength={80}
+              placeholder="Buscar por nombre, apellido o cédula" placeholderTextColor="#8A968F" accessibilityLabel="Buscar por cédula, nombre o apellido"
+              style={{ flex: 1, paddingVertical: 15, fontSize: 15, fontFamily: FUENTE.texto, color: COLOR.texto }} />
+            <Boton texto="Buscar" variante="texto" onPress={() => cargarLista(1)} cargando={cargando && pagina === 1} />
           </View>
           {errorLista && <Aviso tipo="error" texto={errorLista} />}
           {!cargando && !errorLista && items.length === 0 && (
             <Tarjeta><Text>No encontramos pacientes con esos datos. Podés registrarlo con «Paciente nuevo».</Text></Tarjeta>
           )}
           {items.map((p) => (
-            <Tarjeta key={p.id}>
-              <Text style={{ fontSize: 17, fontWeight: '600', color: COLOR.primario }}>{p.nombre} {p.apellido}</Text>
-              <Text>Cédula: {p.cedula}</Text>
-              <Text>Teléfono: {p.telefono || 'No registrado'}</Text>
-              {!p.tiene_consentimiento && <Aviso tipo="aviso" texto="Sin consentimiento informado vigente: no se pueden procesar fotos nuevas." />}
-              {p.tiene_consentimiento ? (
-                <Boton texto="Nuevo seguimiento" icono="camera-outline" estilo={{ marginTop: 10 }}
-                  onPress={() => router.push({ pathname: '/procesamiento', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })} />
-              ) : (
-                <Boton texto="Registrar consentimiento" icono="document-text-outline" estilo={{ marginTop: 10 }} onPress={() => setConsentDe(p)} />
-              )}
-              <Boton texto="Ver historial" icono="time-outline" variante="secundario" estilo={{ marginTop: 8 }}
-                onPress={() => router.push({ pathname: '/historial', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })} />
-              <Boton texto="Dar de baja" icono="trash-outline" variante="texto" onPress={() => setBajaDe(p)} />
+            <Tarjeta key={p.id} estilo={{ padding: 14 }}>
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Ver historial de ${p.nombre} ${p.apellido}`}
+                onPress={() => router.push({ pathname: '/historial', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                <Iniciales nombre={p.nombre} apellido={p.apellido} />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={{ fontSize: 16, fontFamily: FUENTE.textoFuerte, color: COLOR.texto }}>{p.nombre} {p.apellido}</Text>
+                  <Text style={{ fontSize: 13, fontFamily: FUENTE.texto, color: COLOR.textoSuave }}>CI {p.cedula}{p.telefono ? ` · ${p.telefono}` : ''}</Text>
+                </View>
+                {p.tiene_consentimiento
+                  ? <Pildora texto="Consentimiento" icono="checkmark" />
+                  : <Pildora texto="Sin consentimiento" icono="alert" fondo="#F8EBDD" color={COLOR.aviso} />}
+              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
+                {p.tiene_consentimiento ? (
+                  <Boton texto="Nuevo seguimiento" icono="camera-outline" estilo={{ flexGrow: 1, minHeight: 46, paddingVertical: 10 }}
+                    onPress={() => router.push({ pathname: '/procesamiento', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })} />
+                ) : (
+                  <Boton texto="Registrar consentimiento" icono="document-text-outline" estilo={{ flexGrow: 1, minHeight: 46, paddingVertical: 10 }} onPress={() => setConsentDe(p)} />
+                )}
+                <Boton texto="Historial" icono="time-outline" variante="secundario" estilo={{ flexGrow: 1, minHeight: 46, paddingVertical: 10 }}
+                  onPress={() => router.push({ pathname: '/historial', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })} />
+                <BotonIcono icono="trash-outline" etiqueta={`Dar de baja a ${p.nombre} ${p.apellido}`} onPress={() => setBajaDe(p)} />
+              </View>
             </Tarjeta>
           ))}
           {cargando && pagina > 1 && <ActivityIndicator color={COLOR.primario} />}
@@ -194,7 +213,7 @@ export default function PacientesScreen() {
           <Campo etiqueta="Apellido" value={f.apellido} onChangeText={set('apellido')} error={errores.apellido} maxLength={80} />
           <CampoFecha etiqueta="Fecha de nacimiento (opcional)" valor={f.fecha_nacimiento} onCambio={set('fecha_nacimiento')}
             error={errores.fecha_nacimiento} minimo={haceAniosTexto(120)} maximo={hoyTexto()} />
-          <Text style={{ fontSize: 14, color: '#444', marginBottom: 6 }}>Sexo (opcional)</Text>
+          <Text style={{ fontSize: 14, color: COLOR.textoSuave, marginBottom: 6 }}>Sexo (opcional)</Text>
           <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
             {[['F', 'Femenino'], ['M', 'Masculino'], ['O', 'Otro']].map(([v, t]) => (
               <TouchableOpacity key={v} onPress={() => set('sexo')(f.sexo === v ? '' : v)} accessibilityRole="button" accessibilityLabel={t}

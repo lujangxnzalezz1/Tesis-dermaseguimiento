@@ -3,7 +3,7 @@ import { useCallback, useState } from 'react';
 import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import { API_URL, obtenerToken } from '../lib/auth';
 import { useFocusEffect } from 'expo-router';
-import { Aviso, Boton, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 
 const ETIQUETA_ESTADO: Record<string, string> = {
@@ -96,7 +96,7 @@ export default function SuscripcionScreen() {
       {info && <Aviso tipo="ok" texto={info} />}
       {susc && (
         <Tarjeta>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: COLOR.primario }}>{susc.plan.nombre}</Text>
+          <Text style={{ fontSize: 18, fontFamily: FUENTE.titulo, color: COLOR.primario }}>{susc.plan.nombre}</Text>
           <Text>Estado: {ETIQUETA_ESTADO[susc.estado] ?? susc.estado}</Text>
           {susc.fecha_vencimiento && <Text>Vence: {fechaCorta(susc.fecha_vencimiento)} ({susc.dias_restantes} días)</Text>}
           <Text>Procesamiento de imágenes: {susc.funciones_avanzadas ? 'incluido' : 'no disponible'}</Text>
@@ -111,11 +111,11 @@ export default function SuscripcionScreen() {
       <Subtitulo>Planes disponibles</Subtitulo>
       {planes.map((p) => (
         <Tarjeta key={p.codigo} color={p.codigo === actual ? '#E8F5E9' : COLOR.suave}>
-          <Text style={{ fontSize: 17, fontWeight: '700', color: COLOR.primario }}>{p.nombre}</Text>
+          <Text style={{ fontSize: 17, fontFamily: FUENTE.titulo, color: COLOR.primario }}>{p.nombre}</Text>
           <Text style={{ fontSize: 16 }}>{p.periodicidad === 'gratuito' ? 'Gratis' : `${p.precio} ${p.moneda} / ${p.periodicidad === 'mensual' ? 'mes' : 'año'}`}</Text>
           {p.funcionalidades.map((f: string) => <Text key={f}>• {f}</Text>)}
-          {p.limites.map((f: string) => <Text key={f} style={{ color: '#666' }}>– {f}</Text>)}
-          <Text style={{ color: '#666', marginTop: 6, fontSize: 12 }}>{p.condiciones}</Text>
+          {p.limites.map((f: string) => <Text key={f} style={{ color: COLOR.textoSuave }}>– {f}</Text>)}
+          <Text style={{ color: COLOR.textoSuave, marginTop: 6, fontSize: 12 }}>{p.condiciones}</Text>
           <Boton texto={p.codigo === actual ? (p.periodicidad === 'gratuito' ? 'Plan actual' : 'Renovar este plan') : 'Elegir este plan'}
             icono={p.codigo === actual ? 'refresh' : 'checkmark-circle-outline'} estilo={{ marginTop: 10 }}
             deshabilitado={p.codigo === actual && p.periodicidad === 'gratuito'} cargando={ocupado === p.codigo} onPress={() => setElegido(p)} />
@@ -124,10 +124,10 @@ export default function SuscripcionScreen() {
       {puedeCancelar && <Boton texto="Cancelar mi suscripción" icono="close-circle-outline" variante="peligro" onPress={() => setCancelando(true)} />}
 
       <Subtitulo>Mis pagos y comprobantes</Subtitulo>
-      {pagos.length === 0 && <Text style={{ color: '#666' }}>Todavía no tenés pagos.</Text>}
+      {pagos.length === 0 && <Text style={{ color: COLOR.textoSuave }}>Todavía no tenés pagos.</Text>}
       {pagos.map((p) => (
         <View key={p.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' }}>
-          <Text style={{ fontWeight: '600' }}>{fechaCorta(p.fecha)} — {p.plan}</Text>
+          <Text style={{ fontFamily: FUENTE.textoFuerte }}>{fechaCorta(p.fecha)} — {p.plan}</Text>
           <Text>{p.monto} {p.moneda} · {p.estado}{p.comprobante_numero ? ` · Comprobante ${p.comprobante_numero}` : ''}</Text>
           {p.comprobante_id && (
             <Boton texto="Descargar comprobante (PDF)" icono="download-outline" variante="texto" onPress={() => descargarComprobante(p.comprobante_id, p.comprobante_numero)} />

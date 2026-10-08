@@ -2,7 +2,7 @@ import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/dat
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState } from 'react';
 import { Platform, Text, TouchableOpacity, View } from 'react-native';
-import { COLOR } from './ui';
+import { COLOR, FUENTE } from './ui';
 
 /** Fecha en formato AAAA-MM-DD sin corrimientos por zona horaria. */
 function aTexto(d: Date): string {
@@ -32,7 +32,7 @@ export function CampoFecha({
 
   return (
     <View style={{ marginBottom: 12 }}>
-      <Text style={{ fontSize: 14, color: '#444', marginBottom: 6 }}>{etiqueta}</Text>
+      <Text style={{ fontSize: 14, color: COLOR.textoSuave, marginBottom: 6 }}>{etiqueta}</Text>
       {Platform.OS === 'web' ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {React.createElement('input', {
@@ -44,7 +44,7 @@ export function CampoFecha({
             onChange: (e: any) => onCambio(e.target.value),
             style: {
               flex: 1, fontSize: 16, padding: '11px 14px', borderRadius: 8, fontFamily: 'inherit',
-              border: `1px solid ${error ? COLOR.error : '#ccc'}`, color: '#222', backgroundColor: '#fff', minHeight: 46,
+              border: `1px solid ${error ? COLOR.error : '#ccc'}`, color: COLOR.texto, backgroundColor: '#fff', minHeight: 46,
             },
           } as any)}
           {valor ? (
@@ -79,7 +79,7 @@ export function CampoFecha({
           )}
           {abierto && Platform.OS === 'ios' && (
             <TouchableOpacity onPress={() => setAbierto(false)} style={{ alignSelf: 'flex-end', padding: 8 }}>
-              <Text style={{ color: COLOR.primario, fontWeight: '600' }}>Listo</Text>
+              <Text style={{ color: COLOR.primario, fontFamily: FUENTE.textoFuerte }}>Listo</Text>
             </TouchableOpacity>
           )}
         </>

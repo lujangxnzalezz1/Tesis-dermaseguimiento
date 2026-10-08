@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, Text } from 'react-native';
-import { Aviso, Pantalla, Subtitulo, Titulo } from '../components/ui';
+import { Aviso, Pantalla, Subtitulo, Titulo, COLOR } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 
 export default function PrivacidadScreen() {
@@ -18,11 +18,11 @@ export default function PrivacidadScreen() {
       {politica && (
         <>
           <Titulo>{politica.titulo}</Titulo>
-          <Text style={{ color: '#666', marginBottom: 12 }}>Versión {politica.version}</Text>
+          <Text style={{ color: COLOR.textoSuave, marginBottom: 12 }}>Versión {politica.version}</Text>
           {politica.secciones.map((s: any) => (
             <React.Fragment key={s.titulo}>
               <Subtitulo>{s.titulo}</Subtitulo>
-              <Text style={{ lineHeight: 21, color: '#222' }}>{s.texto}</Text>
+              <Text style={{ lineHeight: 21, color: COLOR.texto }}>{s.texto}</Text>
             </React.Fragment>
           ))}
         </>

@@ -1,3 +1,7 @@
+import { COLOR, FUENTE } from '../components/ui';
+import { Figtree_400Regular, Figtree_500Medium, Figtree_600SemiBold } from '@expo-google-fonts/figtree';
+import { Outfit_600SemiBold, Outfit_700Bold } from '@expo-google-fonts/outfit';
+import { useFonts } from 'expo-font';
 import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
@@ -5,6 +9,7 @@ import { cargarToken } from '../lib/auth';
 
 export default function RootLayout() {
   const [listo, setListo] = useState(false);
+  const [fuentes] = useFonts({ Outfit_600SemiBold, Outfit_700Bold, Figtree_400Regular, Figtree_500Medium, Figtree_600SemiBold });
 
   useEffect(() => {
     // Recupera la sesión guardada antes de mostrar cualquier pantalla. Si el servidor la considera
@@ -12,16 +17,20 @@ export default function RootLayout() {
     cargarToken().then(() => setListo(true));
   }, []);
 
-  if (!listo) {
+  if (!listo || !fuentes) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLOR.fondo }}>
         <ActivityIndicator size="large" color="#1D3D47" />
       </View>
     );
   }
 
   return (
-    <Stack screenOptions={{ headerTintColor: '#1D3D47', headerBackTitle: 'Volver' }}>
+    <Stack screenOptions={{
+      headerTintColor: COLOR.primario, headerBackTitle: 'Volver', headerShadowVisible: false,
+      headerStyle: { backgroundColor: COLOR.fondo }, contentStyle: { backgroundColor: COLOR.fondo },
+      headerTitleStyle: { fontFamily: FUENTE.titulo, fontSize: 18, color: COLOR.texto }, headerTitleAlign: 'center',
+    }}>
       <Stack.Screen name="index" options={{ title: 'Ingresar', headerShown: false }} />
       <Stack.Screen name="registro" options={{ title: 'Crear cuenta' }} />
       <Stack.Screen name="recuperar" options={{ title: 'Recuperar contraseña' }} />

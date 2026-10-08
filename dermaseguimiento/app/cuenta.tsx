@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Text } from 'react-native';
-import { Aviso, Boton, Campo, Pantalla, ReglasPassword, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, Pantalla, ReglasPassword, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
 import { api, cerrarSesion, mensaje } from '../lib/api';
 import { usePoliticaPassword } from '../lib/politica';
 
@@ -32,7 +32,7 @@ export default function CuentaScreen() {
   return (
     <Pantalla>
       <Titulo>Mi cuenta</Titulo>
-      {perfil && <Tarjeta><Text style={{ fontWeight: '600' }}>{perfil.nombre}</Text><Text>{perfil.email}</Text><Text>Perfil: {perfil.rol}</Text></Tarjeta>}
+      {perfil && <Tarjeta><Text style={{ fontFamily: FUENTE.textoFuerte }}>{perfil.nombre}</Text><Text>{perfil.email}</Text><Text>Perfil: {perfil.rol}</Text></Tarjeta>}
       <Subtitulo>Cambiar contraseña</Subtitulo>
       {error && <Aviso tipo="error" texto={error} />}
       {ok && <Aviso tipo="ok" texto={ok} />}

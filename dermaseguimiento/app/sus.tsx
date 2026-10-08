@@ -2,7 +2,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { avisar } from '../lib/dialogo';
-import { Aviso, Boton, Campo, COLOR, Pantalla, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, COLOR, Pantalla, Titulo, FUENTE } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 
 const PREGUNTAS = [
@@ -37,7 +37,7 @@ export default function SusScreen() {
   return (
     <Pantalla>
       <Titulo>Encuesta de usabilidad</Titulo>
-      <Text style={{ color: '#555', marginBottom: 12 }}>1 = Totalmente en desacuerdo · 5 = Totalmente de acuerdo</Text>
+      <Text style={{ color: COLOR.textoSuave, marginBottom: 12 }}>1 = Totalmente en desacuerdo · 5 = Totalmente de acuerdo</Text>
       {error && <Aviso tipo="error" texto={error} />}
       {PREGUNTAS.map((p, i) => (
         <View key={i} style={{ marginBottom: 14 }}>
@@ -47,7 +47,7 @@ export default function SusScreen() {
               <TouchableOpacity key={v} accessibilityRole="button" accessibilityLabel={`Pregunta ${i + 1}, valor ${v}`}
                 onPress={() => setResp((r) => r.map((x, j) => (j === i ? v : x)))}
                 style={{ flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1, borderColor: COLOR.primario, alignItems: 'center', backgroundColor: resp[i] === v ? COLOR.primario : '#fff' }}>
-                <Text style={{ color: resp[i] === v ? '#fff' : COLOR.primario, fontWeight: '600' }}>{v}</Text>
+                <Text style={{ color: resp[i] === v ? '#fff' : COLOR.primario, fontFamily: FUENTE.textoFuerte }}>{v}</Text>
               </TouchableOpacity>
             ))}
           </View>

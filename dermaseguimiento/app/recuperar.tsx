@@ -1,7 +1,7 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
-import { Aviso, Boton, Campo, Pantalla, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, Pantalla, Titulo, COLOR } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { EMAIL_RE } from '../lib/politica';
 
@@ -24,7 +24,7 @@ export default function RecuperarScreen() {
   return (
     <Pantalla>
       <Titulo>Recuperar contraseña</Titulo>
-      <Text style={{ color: '#555', marginBottom: 16 }}>
+      <Text style={{ color: COLOR.textoSuave, marginBottom: 16 }}>
         Te enviamos por correo un enlace de un solo uso, válido por pocos minutos, para elegir una contraseña nueva.
       </Text>
       {error && <Aviso tipo="error" texto={error} />}

@@ -2,7 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { avisar } from '../lib/dialogo';
-import { Aviso, Boton, Campo, Pantalla, ReglasPassword, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, Pantalla, ReglasPassword, Titulo, COLOR } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { usePoliticaPassword } from '../lib/politica';
 
@@ -38,7 +38,7 @@ export default function RestablecerScreen() {
       <ReglasPassword reglas={reglas} />
       <Campo etiqueta="Repetí la nueva contraseña" value={confirmar} onChangeText={setConfirmar} secureTextEntry maxLength={128} />
       <Boton texto="Guardar contraseña" icono="save-outline" onPress={enviar} cargando={cargando} />
-      <Text style={{ color: '#666', marginTop: 12, fontSize: 12 }}>El enlace se puede usar una sola vez y vence a los pocos minutos.</Text>
+      <Text style={{ color: COLOR.textoSuave, marginTop: 12, fontSize: 12 }}>El enlace se puede usar una sola vez y vence a los pocos minutos.</Text>
     </Pantalla>
   );
 }

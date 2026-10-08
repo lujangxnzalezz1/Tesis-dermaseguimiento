@@ -1,9 +1,9 @@
 import * as ImagePicker from 'expo-image-picker';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { Image, Platform, Text } from 'react-native';
+import { Image, Platform, Text, View } from 'react-native';
 import { avisar, elegirOrigenFoto } from '../lib/dialogo';
-import { Aviso, Boton, BotonInforme, ImagenProtegida, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, BotonInforme, ComparadorAntesDespues, ImagenProtegida, Indicadores, Pantalla, Interpretacion, ResumenLesiones, ResumenManchas, ResumenOjeras, Subtitulo, Tarjeta, Titulo, COLOR } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 import { tomarFotoPendiente } from '../lib/capturaStore';
 
@@ -101,7 +101,7 @@ export default function ProcesamientoScreen() {
   return (
     <Pantalla>
       <Titulo>Nuevo seguimiento</Titulo>
-      <Text style={{ color: '#666', marginBottom: 12 }}>Paciente: {nombre} {apellido}</Text>
+      <Text style={{ color: COLOR.textoSuave, marginBottom: 12 }}>Paciente: {nombre} {apellido}</Text>
       <Aviso tipo="info" texto="Los resultados son informativos y de apoyo a la documentación clínica. La interpretación clínica corresponde exclusivamente al profesional médico habilitado." />
       {error && <Aviso tipo="error" texto={error} />}
       {sinPlan && <Boton texto="Ver planes y suscripción" icono="card-outline" onPress={() => router.push('/suscripcion')} />}
@@ -109,7 +109,7 @@ export default function ProcesamientoScreen() {
       <Subtitulo>Imagen de referencia</Subtitulo>
       {base && !ref ? (
         <>
-          <Text style={{ color: '#444' }}>Se usa la foto de la primera consulta ({fechaCorta(base.fecha)}).</Text>
+          <Text style={{ color: COLOR.textoSuave }}>Se usa la foto de la primera consulta ({fechaCorta(base.fecha)}).</Text>
           <ImagenProtegida url={base.url} />
           <Boton texto="Usar otra foto de referencia" icono="swap-horizontal" variante="texto" onPress={() => pedir(setRef)} />
         </>
@@ -117,32 +117,36 @@ export default function ProcesamientoScreen() {
         <>
           <Boton texto={ref ? 'Cambiar referencia (cámara con guía)' : 'Tomar referencia con guía'} icono="scan-outline" onPress={() => conGuia('referencia')} />
           <Boton texto="Elegir de la galería" icono="image-outline" variante="texto" onPress={() => pedir(setRef)} />
-          {ref && <Image source={{ uri: ref.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} resizeMode="contain" />}
+          {ref && <Image source={{ uri: ref.uri }} style={{ width: '100%', height: 240, borderRadius: 20, marginTop: 10, backgroundColor: COLOR.arena }} resizeMode="contain" />}
         </>
       )}
       <Subtitulo>Nueva captura</Subtitulo>
       <Boton texto={nueva ? 'Repetir con la cámara guiada' : 'Tomar foto con guía'} icono="scan-outline" onPress={() => conGuia('nueva')} />
       <Boton texto="Elegir de la galería" icono="image-outline" variante="texto" onPress={() => pedir(setNueva)} />
-      {nueva && <Image source={{ uri: nueva.uri }} style={{ width: '100%', height: 220, borderRadius: 8, marginTop: 10 }} resizeMode="contain" />}
+      {nueva && <Image source={{ uri: nueva.uri }} style={{ width: '100%', height: 240, borderRadius: 20, marginTop: 10, backgroundColor: COLOR.arena }} resizeMode="contain" />}
 
       <Boton texto="Procesar imágenes" icono="play-circle-outline" estilo={{ marginTop: 20 }} onPress={procesar} cargando={procesando} />
 
       {res && (
-        <Tarjeta>
-          <Subtitulo>Resultado</Subtitulo>
+        <View style={{ marginTop: 18 }}>
+          <Titulo>Resultado</Titulo>
+          <ComparadorAntesDespues urlReferencia={res.url_imagen_referencia} urlActual={res.url_imagen_alineada} />
           <Interpretacion s={res} />
+          <Indicadores s={res} />
           <BotonInforme seguimientoId={res.id} />
+        <Tarjeta>
           <Subtitulo>Detalle técnico</Subtitulo>
           <Text>Puntos faciales: {res.landmarks_referencia} (referencia) / {res.landmarks_nueva} (nueva)</Text>
           <ImagenProtegida url={res.url_imagen_alineada} />
           <Subtitulo>Análisis colorimétrico (CIE L*a*b*)</Subtitulo>
           <Text>Delta E promedio (CIE76): {res.delta_e_promedio.toFixed(2)} — cambio {res.interpretacion?.magnitud_color ?? ''}</Text>
-          {res.tiempo_procesamiento_ms != null && <Text style={{ color: '#666' }}>Procesado en {(res.tiempo_procesamiento_ms / 1000).toFixed(1)} s</Text>}
+          {res.tiempo_procesamiento_ms != null && <Text style={{ color: COLOR.textoSuave }}>Procesado en {(res.tiempo_procesamiento_ms / 1000).toFixed(1)} s</Text>}
           <ImagenProtegida url={res.url_mapa_calor} />
           <ResumenLesiones s={res} />
           <ResumenOjeras s={res} />
           <ResumenManchas s={res} />
         </Tarjeta>
+        </View>
       )}
     </Pantalla>
   );

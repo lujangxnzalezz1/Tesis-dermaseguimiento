@@ -4,7 +4,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { Aviso, Boton, COLOR, ImagenProtegida } from '../components/ui';
+import { Aviso, Boton, COLOR, ImagenProtegida, FUENTE } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { dejarFoto } from '../lib/capturaStore';
 
@@ -122,7 +122,7 @@ export default function CapturaScreen() {
         </Text>
         {referencia && (
           <>
-            <Text style={{ fontWeight: '600', color: COLOR.primario }}>Foto de la consulta anterior (repetí esta pose y distancia):</Text>
+            <Text style={{ fontFamily: FUENTE.textoFuerte, color: COLOR.primario }}>Foto de la consulta anterior (repetí esta pose y distancia):</Text>
             <ImagenProtegida url={referencia} />
           </>
         )}
@@ -153,7 +153,7 @@ export default function CapturaScreen() {
   if (foto) {
     return (
       <ScrollView contentContainerStyle={{ padding: 20, maxWidth: 640, width: '100%', alignSelf: 'center' }}>
-        <Image source={{ uri: foto }} style={{ width: '100%', height: 320, borderRadius: 8, backgroundColor: '#000' }} resizeMode="contain" />
+        <Image source={{ uri: foto }} style={{ width: '100%', height: 320, borderRadius: 20, backgroundColor: COLOR.arena }} resizeMode="contain" />
         {verificando && <View style={{ marginTop: 16, alignItems: 'center' }}><ActivityIndicator color={COLOR.primario} /><Text>Revisando la foto…</Text></View>}
         {error && <Aviso tipo="error" texto={error} />}
         {resultado && (
@@ -186,7 +186,7 @@ export default function CapturaScreen() {
 
   // ---------------------------------------------------------------- cámara con guía
   return (
-    <View style={{ flex: 1, backgroundColor: '#000' }}>
+    <View style={{ flex: 1, backgroundColor: '#14211B' }}>
       {/* mirror={false}: la foto guardada no sale espejada aunque la vista previa de la frontal sí lo esté */}
       <CameraView key={lado} ref={camara} style={StyleSheet.absoluteFill} facing={lado} mirror={false}
         onCameraReady={() => setLista(true)} />
@@ -212,18 +212,18 @@ export default function CapturaScreen() {
         {referencia && (
           <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cambiar la transparencia de la referencia"
             onPress={() => setOpacidad((o) => (o + 1) % OPACIDADES.length)} style={e.botonChico}>
-            <Ionicons name="layers-outline" size={20} color="#fff" />
+            <Ionicons name="layers-outline" size={20} color="#F7F2E7" />
             <Text style={e.textoChico}>{opacidad === 0 ? 'Referencia: oculta' : `Referencia: ${Math.round(OPACIDADES[opacidad] * 100)} %`}</Text>
           </TouchableOpacity>
         )}
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Cambiar de cámara"
           onPress={() => { setLista(false); setLado((l) => (l === 'back' ? 'front' : 'back')); }} style={e.botonChico}>
-          <Ionicons name="camera-reverse-outline" size={20} color="#fff" />
+          <Ionicons name="camera-reverse-outline" size={20} color="#F7F2E7" />
           <Text style={e.textoChico}>{lado === 'back' ? 'Cambiar a cámara frontal' : 'Cambiar a cámara trasera'}</Text>
         </TouchableOpacity>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Tomar foto" onPress={sacar} disabled={!lista} style={[e.disparador, !lista && { opacity: 0.5 }]}>
           <Ionicons name="camera" size={30} color={COLOR.primario} />
-          <Text style={{ color: COLOR.primario, fontWeight: '700', fontSize: 12 }}>Tomar foto</Text>
+          <Text style={{ color: COLOR.primario, fontFamily: FUENTE.titulo, fontSize: 12 }}>Tomar foto</Text>
         </TouchableOpacity>
       </View>
       {error && <View style={{ position: 'absolute', top: 90, left: 16, right: 16 }}><Aviso tipo="error" texto={error} /></View>}
@@ -233,12 +233,12 @@ export default function CapturaScreen() {
 
 const e = StyleSheet.create({
   centro: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  ovalo: { width: '68%', maxWidth: 360, aspectRatio: 0.75, borderRadius: 999, borderWidth: 3, borderColor: '#fff', borderStyle: 'dashed' },
-  instrucciones: { position: 'absolute', top: 16, left: 16, right: 16, backgroundColor: '#000a', borderRadius: 8, padding: 10 },
-  textoGuia: { color: '#fff', textAlign: 'center', fontSize: 14 },
+  ovalo: { width: '68%', maxWidth: 360, aspectRatio: 0.75, borderRadius: 999, borderWidth: 3, borderColor: '#F7F2E7' },
+  instrucciones: { position: 'absolute', top: 16, left: 16, right: 16, backgroundColor: 'rgba(20,33,27,0.78)', borderRadius: 20, paddingVertical: 12, paddingHorizontal: 14 },
+  textoGuia: { color: '#F7F2E7', textAlign: 'center', fontSize: 14, lineHeight: 20, fontFamily: FUENTE.textoMedio },
   barra: { position: 'absolute', bottom: 24, left: 0, right: 0, alignItems: 'center', gap: 12 },
-  disparador: { width: 86, height: 86, borderRadius: 43, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center' },
-  botonChico: { flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: '#000a', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16 },
-  textoChico: { color: '#fff', fontSize: 13 },
+  disparador: { width: 86, height: 86, borderRadius: 43, backgroundColor: '#F7F2E7', borderWidth: 5, borderColor: 'rgba(247,242,231,0.35)', alignItems: 'center', justifyContent: 'center' },
+  botonChico: { flexDirection: 'row', gap: 6, alignItems: 'center', backgroundColor: 'rgba(20,33,27,0.72)', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 999, minHeight: 44 },
+  textoChico: { color: '#F7F2E7', fontSize: 13, fontFamily: FUENTE.textoFuerte },
   control: { flexDirection: 'row', gap: 8, alignItems: 'flex-start', paddingVertical: 6, borderBottomWidth: 1, borderColor: '#eee' },
 });

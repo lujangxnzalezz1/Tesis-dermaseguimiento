@@ -1,7 +1,8 @@
 import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
+import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from 'react-native';
-import { Aviso, Boton, Campo, Pantalla, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, COLOR, FUENTE, Pantalla, Tarjeta } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { guardarToken, obtenerToken } from '../lib/auth';
 import { EMAIL_RE } from '../lib/politica';
@@ -50,21 +51,35 @@ export default function LoginScreen() {
 
   return (
     <Pantalla>
-      <View style={{ height: 40 }} />
-      <Titulo>DermaSeguimiento</Titulo>
-      <Text style={{ color: '#666', marginBottom: 24 }}>Iniciá sesión para continuar</Text>
+      <View style={{ position: 'absolute', top: -120, right: -110, width: 320, height: 320, borderRadius: 160, backgroundColor: COLOR.suave }} />
+      <View style={{ position: 'absolute', top: 110, right: 30, width: 64, height: 64, borderRadius: 32, borderWidth: 2, borderColor: COLOR.dorado }} />
+      <View style={{ height: 36 }} />
+      <View style={{ width: 64, height: 64, borderRadius: 22, backgroundColor: COLOR.primario, alignItems: 'center', justifyContent: 'center', marginBottom: 18 }}>
+        <Ionicons name="happy-outline" size={34} color={COLOR.fondo} />
+      </View>
+      <Text style={{ fontFamily: FUENTE.titulo, fontSize: 32, lineHeight: 37, color: COLOR.texto, letterSpacing: -0.5 }}>Seguimiento de la piel,{'\n'}consulta a consulta</Text>
+      <Text style={{ fontFamily: FUENTE.texto, fontSize: 15, lineHeight: 22, color: COLOR.textoSuave, marginTop: 8, marginBottom: 22 }}>
+        Compará fotos de tus pacientes alineadas automáticamente y entregá informes claros.
+      </Text>
       {error && <Aviso tipo="error" texto={error} />}
       {info && <Aviso tipo="ok" texto={info} />}
       {sinConfirmar && (
         <Boton texto="Reenviar correo de confirmación" icono="mail-outline" variante="secundario" cargando={reenviando} onPress={reenviar} estilo={{ marginBottom: 12 }} />
       )}
-      <Campo etiqueta="Correo electrónico" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" maxLength={120} />
-      <Campo etiqueta="Contraseña" value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" maxLength={128} onSubmitEditing={ingresar} returnKeyType="go" />
-      <Boton texto="Ingresar" icono="log-in-outline" onPress={ingresar} cargando={cargando} />
-      <View style={{ height: 8 }} />
-      <Boton texto="Crear cuenta" icono="person-add-outline" variante="secundario" onPress={() => router.push('/registro')} />
-      <Boton texto="Olvidé mi contraseña" icono="key-outline" variante="texto" onPress={() => router.push('/recuperar')} />
-      <Boton texto="Política de privacidad" icono="shield-checkmark-outline" variante="texto" onPress={() => router.push('/privacidad')} />
+      <Tarjeta estilo={{ padding: 22, borderRadius: 28 }}>
+        <Campo etiqueta="Correo electrónico" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" maxLength={120} placeholder="nombre@consultorio.com" />
+        <Campo etiqueta="Contraseña" value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" maxLength={128} onSubmitEditing={ingresar} returnKeyType="go" />
+        <Boton texto="¿Olvidaste tu contraseña?" variante="texto" onPress={() => router.push('/recuperar')} estilo={{ alignSelf: 'flex-end', paddingHorizontal: 0, marginTop: -6, marginBottom: 4 }} />
+        <Boton texto="Ingresar" onPress={ingresar} cargando={cargando} />
+      </Tarjeta>
+      <View style={{ alignItems: 'center', gap: 4, marginTop: 18 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Text style={{ fontFamily: FUENTE.texto, color: COLOR.textoSuave, fontSize: 14 }}>¿Primera vez?</Text>
+          <Boton texto="Creá tu cuenta" variante="texto" onPress={() => router.push('/registro')} estilo={{ paddingHorizontal: 6 }} />
+        </View>
+        <Boton texto="Política de privacidad" icono="lock-closed-outline" variante="texto" onPress={() => router.push('/privacidad')} />
+        <Text style={{ fontFamily: FUENTE.texto, color: COLOR.textoSuave, fontSize: 12 }}>Datos protegidos según la Ley N.º 7593/2025</Text>
+      </View>
     </Pantalla>
   );
 }

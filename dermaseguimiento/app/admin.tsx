@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
-import { Aviso, Boton, Campo, Casilla, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo } from '../components/ui';
+import { Aviso, Boton, Campo, Casilla, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
 import { api, fechaCorta, mensaje } from '../lib/api';
 
 type Seccion = 'usuarios' | 'suscripciones' | 'auditoria' | 'correo';
@@ -24,7 +24,7 @@ export default function AdminScreen() {
         {SECCIONES.map((s) => (
           <TouchableOpacity key={s.id} accessibilityRole="button" accessibilityLabel={s.texto} onPress={() => setSeccion(s.id)}
             style={{ paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: COLOR.primario, backgroundColor: seccion === s.id ? COLOR.primario : '#fff' }}>
-            <Text style={{ color: seccion === s.id ? '#fff' : COLOR.primario, fontWeight: '600' }}>{s.texto}</Text>
+            <Text style={{ color: seccion === s.id ? '#fff' : COLOR.primario, fontFamily: FUENTE.textoFuerte }}>{s.texto}</Text>
           </TouchableOpacity>
         ))}
       </View>
@@ -65,11 +65,11 @@ function Usuarios() {
       <Boton texto="Buscar" icono="search" onPress={cargar} />
       {items.map((u) => (
         <Tarjeta key={u.id} color={u.activo ? COLOR.suave : '#FDECEA'}>
-          <Text style={{ fontWeight: '600' }}>{u.nombre} · {u.rol}</Text>
+          <Text style={{ fontFamily: FUENTE.textoFuerte }}>{u.nombre} · {u.rol}</Text>
           <Text>{u.email}</Text>
-          <Text style={{ color: '#666' }}>Alta: {fechaCorta(u.fecha_creacion)} · Último acceso: {fechaCorta(u.ultimo_acceso)}</Text>
+          <Text style={{ color: COLOR.textoSuave }}>Alta: {fechaCorta(u.fecha_creacion)} · Último acceso: {fechaCorta(u.ultimo_acceso)}</Text>
           {!u.activo && <Text style={{ color: COLOR.error }}>Inactivo desde {fechaCorta(u.fecha_inactivacion)}{u.motivo_inactivacion ? ` — ${u.motivo_inactivacion}` : ''}</Text>}
-          {u.fecha_reactivacion && u.activo && <Text style={{ color: '#666' }}>Reactivado: {fechaCorta(u.fecha_reactivacion)}</Text>}
+          {u.fecha_reactivacion && u.activo && <Text style={{ color: COLOR.textoSuave }}>Reactivado: {fechaCorta(u.fecha_reactivacion)}</Text>}
           {u.activo
             ? <Boton texto="Inactivar" icono="ban-outline" variante="peligro" estilo={{ marginTop: 8 }} onPress={() => setAccion({ u, tipo: 'inactivar' })} />
             : <Boton texto="Reactivar" icono="checkmark-circle-outline" estilo={{ marginTop: 8 }} onPress={() => setAccion({ u, tipo: 'reactivar' })} />}
@@ -97,7 +97,7 @@ function Suscripciones() {
   return (
     <>
       {error && <Aviso tipo="error" texto={error} />}
-      {data && <Text style={{ marginBottom: 8, color: '#444' }}>
+      {data && <Text style={{ marginBottom: 8, color: COLOR.textoSuave }}>
         Activas {data.resumen.activa} · Por vencer {data.resumen.proxima_a_vencer} · Vencidas {data.resumen.vencida} · Canceladas {data.resumen.cancelada} · Pendientes {data.resumen.pendiente_pago}
       </Text>}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
@@ -111,13 +111,13 @@ function Suscripciones() {
       {!data && <ActivityIndicator color={COLOR.primario} />}
       {data?.items.map((s: any) => (
         <Tarjeta key={s.suscripcion_id}>
-          <Text style={{ fontWeight: '600' }}>{s.usuario} — {s.plan}</Text>
+          <Text style={{ fontFamily: FUENTE.textoFuerte }}>{s.usuario} — {s.plan}</Text>
           <Text>{s.email}</Text>
           <Text>Estado: {s.categoria.replace(/_/g, ' ')}{s.es_prueba ? ' (prueba)' : ''}</Text>
           <Text>Vence: {s.fecha_vencimiento ? `${fechaCorta(s.fecha_vencimiento)} (${s.dias_restantes} días)` : 'sin vencimiento'}</Text>
         </Tarjeta>
       ))}
-      {data && data.items.length === 0 && <Text style={{ color: '#666' }}>No hay suscripciones en esta categoría.</Text>}
+      {data && data.items.length === 0 && <Text style={{ color: COLOR.textoSuave }}>No hay suscripciones en esta categoría.</Text>}
     </>
   );
 }
@@ -155,12 +155,12 @@ function Auditoria() {
         ))}
       </View>
       <Boton texto="Aplicar filtros" icono="filter-outline" onPress={() => cargar(1)} />
-      <Text style={{ marginVertical: 8, color: '#666' }}>{total} registros (solo lectura)</Text>
+      <Text style={{ marginVertical: 8, color: COLOR.textoSuave }}>{total} registros (solo lectura)</Text>
       {items.map((a) => (
         <View key={a.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' }}>
-          <Text style={{ fontWeight: '600', color: a.resultado === 'fallo' ? COLOR.error : COLOR.primario }}>{a.modulo} · {a.accion} · {a.resultado}</Text>
+          <Text style={{ fontFamily: FUENTE.textoFuerte, color: a.resultado === 'fallo' ? COLOR.error : COLOR.primario }}>{a.modulo} · {a.accion} · {a.resultado}</Text>
           <Text style={{ fontSize: 12 }}>{fechaCorta(a.fecha)} · {a.usuario ?? 'sin usuario'} · {a.ip ?? '—'}</Text>
-          {a.detalle ? <Text style={{ fontSize: 12, color: '#666' }}>{a.detalle}</Text> : null}
+          {a.detalle ? <Text style={{ fontSize: 12, color: COLOR.textoSuave }}>{a.detalle}</Text> : null}
         </View>
       ))}
       {items.length < total && <Boton texto="Cargar más" icono="chevron-down" variante="secundario" onPress={() => cargar(pagina + 1)} />}
