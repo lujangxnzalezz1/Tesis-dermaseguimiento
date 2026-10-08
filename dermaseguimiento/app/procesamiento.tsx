@@ -131,7 +131,7 @@ export default function ProcesamientoScreen() {
       {res && (
         <View style={{ marginTop: 18 }}>
           <Titulo>Resultado</Titulo>
-          <ComparadorAntesDespues urlReferencia={res.url_imagen_referencia} urlActual={res.url_imagen_alineada} />
+          <ComparadorAntesDespues s={res} />
           <Interpretacion s={res} />
           <Indicadores s={res} />
           <ValoracionClinica alGuardar={setRes} seguimientoId={res.id} inicial={res.valoracion_clinica} />

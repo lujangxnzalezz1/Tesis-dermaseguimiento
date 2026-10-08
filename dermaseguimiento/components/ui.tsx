@@ -370,12 +370,30 @@ export function Interpretacion({ s }: { s: any }) {
   );
 }
 
-/** Comparador antes/después: la referencia queda encima, recortada; se arrastra (o se toca) para mover el corte. */
-export function ComparadorAntesDespues({ urlReferencia, urlActual, alto = 340 }: { urlReferencia: string; urlActual: string; alto?: number }) {
+type Capa = { clave: string; nombre: string; url: string; leyenda: string };
+
+/** Capas que se pueden dibujar sobre la foto de hoy: todas salen de los análisis del seguimiento. */
+function capasDe(s: any): Capa[] {
+  const c: Capa[] = [{ clave: 'foto', nombre: 'Foto', url: s.url_imagen_alineada, leyenda: 'Foto de hoy, alineada con la de referencia.' }];
+  if (s.url_mapa_calor) c.push({ clave: 'color', nombre: 'Color', url: s.url_mapa_calor, leyenda: 'Cambio de color: azul = igual, verde/amarillo = cambio medio, rojo = cambio grande.' });
+  if (s.url_imagen_manchas) c.push({ clave: 'manchas', nombre: 'Manchas', url: s.url_imagen_manchas, leyenda: 'Manchas: celeste = en la referencia, naranja = hoy.' });
+  if (s.url_imagen_lesiones) c.push({ clave: 'lesiones', nombre: 'Lesiones', url: s.url_imagen_lesiones, leyenda: 'Lesiones: rojo = nuevas, verde = persisten, amarillo punteado = ya no aparecen.' });
+  if (s.url_imagen_textura) c.push({ clave: 'textura', nombre: 'Textura', url: s.url_imagen_textura, leyenda: 'Textura: líneas en naranja, poros en celeste, brillo en blanco.' });
+  if (s.url_imagen_periorbital) c.push({ clave: 'ojeras', nombre: 'Ojeras', url: s.url_imagen_periorbital, leyenda: 'Ojeras: zona bajo el ojo (violeta) comparada con la mejilla (celeste).' });
+  return c;
+}
+
+/** Comparador antes/después: la referencia queda encima, recortada; se arrastra (o se toca) para mover el corte.
+ *  Capas: dibuja sobre la foto de hoy el resultado de cada análisis. Parpadeo: alterna antes/después para notar cambios sutiles. */
+export function ComparadorAntesDespues({ s, alto = 340 }: { s: any; alto?: number }) {
+  const capas = capasDe(s);
+  const [capa, setCapa] = useState('foto');
+  const actual = capas.find((c) => c.clave === capa) ?? capas[0];
   const [ancho, setAncho] = useState(0);
   const [pos, setPos] = useState(0.5);
+  const [parpadeo, setParpadeo] = useState(false);
   const anchoRef = useRef(0);
-  const mover = (x: number) => { if (anchoRef.current) setPos(Math.min(1, Math.max(0, x / anchoRef.current))); };
+  const mover = (x: number) => { setParpadeo(false); if (anchoRef.current) setPos(Math.min(1, Math.max(0, x / anchoRef.current))); };
   const responder = useMemo(() => PanResponder.create({
     onStartShouldSetPanResponder: () => true,
     onMoveShouldSetPanResponder: () => true,
@@ -383,24 +401,59 @@ export function ComparadorAntesDespues({ urlReferencia, urlActual, alto = 340 }:
     onPanResponderMove: (e) => mover(e.nativeEvent.locationX),
     onPanResponderTerminationRequest: () => false,
   }), []);
+  // Parpadeo a ≈ 1,4 cambios por segundo (lejos de los 3 Hz que pueden molestar a personas fotosensibles)
+  useEffect(() => {
+    if (!parpadeo) return;
+    setPos(1);
+    const t = setInterval(() => setPos((p) => (p > 0.5 ? 0 : 1)), 700);
+    return () => { clearInterval(t); setPos(0.5); };
+  }, [parpadeo]);
   const alMedir = (e: LayoutChangeEvent) => { anchoRef.current = e.nativeEvent.layout.width; setAncho(e.nativeEvent.layout.width); };
   const img = { width: ancho || 1, height: alto, marginTop: 0, borderRadius: 0, backgroundColor: COLOR.arena };
+  const mostrando = parpadeo ? (pos > 0.5 ? 'Referencia' : `Hoy · ${actual.nombre.toLowerCase()}`) : null;
   return (
     <View style={{ backgroundColor: COLOR.tarjeta, borderRadius: 28, padding: 10, marginTop: 8, ...SOMBRA }}>
       <View onLayout={alMedir} {...responder.panHandlers} accessibilityLabel="Comparador antes y después: arrastrá para mover el corte"
         style={{ height: alto, borderRadius: 20, overflow: 'hidden', backgroundColor: COLOR.arena }}>
-        <View pointerEvents="none" style={{ position: 'absolute', inset: 0 } as any}><ImagenProtegida url={urlActual} estilo={img} /></View>
+        <View pointerEvents="none" style={{ position: 'absolute', inset: 0 } as any}><ImagenProtegida url={actual.url} estilo={img} /></View>
         <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: 0, width: ancho * pos, overflow: 'hidden' }}>
-          <ImagenProtegida url={urlReferencia} estilo={img} />
+          <ImagenProtegida url={s.url_imagen_referencia} estilo={img} />
         </View>
-        <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: ancho * pos - 1.5, width: 3, backgroundColor: COLOR.tarjeta }} />
-        <View pointerEvents="none" style={{ position: 'absolute', top: alto / 2 - 20, left: ancho * pos - 20, width: 40, height: 40, borderRadius: 20, backgroundColor: COLOR.tarjeta, alignItems: 'center', justifyContent: 'center', ...SOMBRA }}>
-          <Ionicons name="swap-horizontal" size={20} color={COLOR.primario} />
-        </View>
-        <View pointerEvents="none" style={{ position: 'absolute', left: 10, top: 10 }}><Pildora texto="Referencia" fondo="#FFFDF8E6" /></View>
-        <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10 }}><Pildora texto="Hoy · alineada" fondo={COLOR.primario} color={COLOR.tarjeta} /></View>
+        {!parpadeo && (
+          <>
+            <View pointerEvents="none" style={{ position: 'absolute', top: 0, bottom: 0, left: ancho * pos - 1.5, width: 3, backgroundColor: COLOR.tarjeta }} />
+            <View pointerEvents="none" style={{ position: 'absolute', top: alto / 2 - 20, left: ancho * pos - 20, width: 40, height: 40, borderRadius: 20, backgroundColor: COLOR.tarjeta, alignItems: 'center', justifyContent: 'center', ...SOMBRA }}>
+              <Ionicons name="swap-horizontal" size={20} color={COLOR.primario} />
+            </View>
+            <View pointerEvents="none" style={{ position: 'absolute', left: 10, top: 10 }}><Pildora texto="Referencia" fondo="#FFFDF8E6" /></View>
+            <View pointerEvents="none" style={{ position: 'absolute', right: 10, top: 10 }}><Pildora texto={`Hoy · ${actual.nombre.toLowerCase()}`} fondo={COLOR.primario} color={COLOR.tarjeta} /></View>
+          </>
+        )}
+        {mostrando && (
+          <View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 10, alignItems: 'center' }}>
+            <Pildora texto={mostrando} fondo={pos > 0.5 ? '#FFFDF8E6' : COLOR.primario} color={pos > 0.5 ? COLOR.primario : COLOR.tarjeta} />
+          </View>
+        )}
       </View>
-      <Text style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave, textAlign: 'center', marginTop: 8 }}>Deslizá sobre la foto para comparar</Text>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6, paddingVertical: 10 }} accessibilityRole="tablist">
+        {capas.map((c) => {
+          const sel = c.clave === actual.clave;
+          return (
+            <TouchableOpacity key={c.clave} accessibilityRole="tab" accessibilityState={{ selected: sel }} onPress={() => setCapa(c.clave)}
+              style={{ paddingHorizontal: 14, minHeight: 38, borderRadius: 999, justifyContent: 'center', backgroundColor: sel ? COLOR.primario : COLOR.suave }}>
+              <Text style={{ fontFamily: FUENTE.textoFuerte, fontSize: 13, color: sel ? COLOR.tarjeta : COLOR.primario }}>{c.nombre}</Text>
+            </TouchableOpacity>
+          );
+        })}
+      </ScrollView>
+      <Text style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave, lineHeight: 17 }}>{actual.leyenda}</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 4 }}>
+        <Text style={{ fontFamily: FUENTE.texto, fontSize: 12, color: COLOR.textoSuave, flex: 1 }}>
+          {parpadeo ? 'Alternando antes y después: mirá qué cambia.' : 'Deslizá sobre la foto para comparar.'}
+        </Text>
+        <Boton texto={parpadeo ? 'Detener' : 'Parpadeo'} icono={parpadeo ? 'pause' : 'repeat'} variante="texto" onPress={() => setParpadeo(!parpadeo)} />
+      </View>
     </View>
   );
 }

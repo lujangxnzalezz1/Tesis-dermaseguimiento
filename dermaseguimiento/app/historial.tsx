@@ -78,7 +78,7 @@ export default function HistorialScreen() {
       {items.map((s) => (
         <View key={s.id} style={{ marginTop: 18 }}>
           <Subtitulo>{fechaCorta(s.fecha)}</Subtitulo>
-          <ComparadorAntesDespues urlReferencia={s.url_imagen_referencia} urlActual={s.url_imagen_alineada} alto={300} />
+          <ComparadorAntesDespues s={s} alto={300} />
           <Interpretacion s={s} />
           <Indicadores s={s} />
           <ValoracionClinica alGuardar={actualizar} seguimientoId={s.id} inicial={s.valoracion_clinica} />
