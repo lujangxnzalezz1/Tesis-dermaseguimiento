@@ -47,13 +47,14 @@ export function Pantalla({ children }: { children: ReactNode }) {
 export function Boton({
   texto, onPress, icono, variante = 'primario', cargando, deshabilitado, estilo,
 }: {
-  texto: string; onPress: () => void; icono?: IconName; variante?: 'primario' | 'secundario' | 'peligro' | 'texto';
+  texto: string; onPress: () => void; icono?: IconName; variante?: 'primario' | 'secundario' | 'peligro' | 'texto' | 'claro';
   cargando?: boolean; deshabilitado?: boolean; estilo?: StyleProp<ViewStyle>;
 }) {
   const sec = variante === 'secundario';
   const txt = variante === 'texto';
-  const fondo = variante === 'peligro' ? COLOR.error : sec || txt ? 'transparent' : COLOR.primario;
-  const color = sec || txt ? COLOR.primario : COLOR.tarjeta;
+  const claro = variante === 'claro'; // botón crema sobre fondo verde
+  const fondo = variante === 'peligro' ? COLOR.error : claro ? COLOR.fondo : sec || txt ? 'transparent' : COLOR.primario;
+  const color = sec || txt || claro ? COLOR.primario : COLOR.tarjeta;
   return (
     <TouchableOpacity
       accessibilityRole="button"

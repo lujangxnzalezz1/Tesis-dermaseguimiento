@@ -54,11 +54,11 @@ export default function HistorialScreen() {
           <View style={{ flex: 1 }}>
             <Text style={{ fontFamily: FUENTE.titulo, fontSize: 22, color: COLOR.tarjeta }}>{nombre} {apellido}</Text>
             <Text style={{ fontFamily: FUENTE.texto, fontSize: 13, color: '#D9E8DF' }}>
-              {items.length ? `${items.length}${items.length % TAM === 0 ? '+' : ''} seguimientos` : 'Sin seguimientos todavía'}
+              {items.length ? `${items.length}${items.length % TAM === 0 ? '+' : ''} ${items.length === 1 ? 'seguimiento' : 'seguimientos'}` : 'Sin seguimientos todavía'}
             </Text>
           </View>
         </View>
-        <Boton texto="Nuevo seguimiento" icono="camera-outline" estilo={{ marginTop: 16, backgroundColor: COLOR.fondo }}
+        <Boton texto="Nuevo seguimiento" icono="camera-outline" variante="claro" estilo={{ marginTop: 16 }}
           onPress={() => router.push({ pathname: '/procesamiento', params: { pacienteId, nombre, apellido } })} />
       </View>
 

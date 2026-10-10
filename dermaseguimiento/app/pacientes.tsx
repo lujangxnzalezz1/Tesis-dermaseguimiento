@@ -178,13 +178,13 @@ export default function PacientesScreen() {
                 onPress={() => router.push({ pathname: '/historial', params: { pacienteId: String(p.id), nombre: p.nombre, apellido: p.apellido } })}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
                 <Iniciales nombre={p.nombre} apellido={p.apellido} />
-                <View style={{ flex: 1, gap: 3 }}>
+                <View style={{ flex: 1, gap: 4, minWidth: 0 }}>
                   <Text style={{ fontSize: 16, fontFamily: FUENTE.textoFuerte, color: COLOR.texto }}>{p.nombre} {p.apellido}</Text>
                   <Text style={{ fontSize: 13, fontFamily: FUENTE.texto, color: COLOR.textoSuave }}>CI {p.cedula}{p.telefono ? ` · ${p.telefono}` : ''}</Text>
+                  {p.tiene_consentimiento
+                    ? <Pildora texto="Consentimiento vigente" icono="checkmark" />
+                    : <Pildora texto="Sin consentimiento" icono="alert" fondo="#F8EBDD" color={COLOR.aviso} />}
                 </View>
-                {p.tiene_consentimiento
-                  ? <Pildora texto="Consentimiento" icono="checkmark" />
-                  : <Pildora texto="Sin consentimiento" icono="alert" fondo="#F8EBDD" color={COLOR.aviso} />}
               </TouchableOpacity>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 }}>
                 {p.tiene_consentimiento ? (
