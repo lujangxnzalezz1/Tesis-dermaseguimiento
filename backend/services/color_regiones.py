@@ -49,6 +49,15 @@ def _superponer(base_bgr, color_bgr, intensidad, mascara):
 
 
 def analizar(ref_bgr, alineada_bgr, puntos, mascara_rostro) -> dict:
+    """En fotos grandes trabaja sobre copias de hasta 1600 px de ancho: los promedios por zona no cambian y los
+    mapas son solo para mostrar (se ven igual en el comparador, que ajusta la imagen a la pantalla)."""
+    f = min(1.0, 1600 / ref_bgr.shape[1])
+    if f < 1:
+        tam = (int(round(ref_bgr.shape[1] * f)), int(round(ref_bgr.shape[0] * f)))
+        ref_bgr = cv2.resize(ref_bgr, tam, interpolation=cv2.INTER_AREA)
+        alineada_bgr = cv2.resize(alineada_bgr, tam, interpolation=cv2.INTER_AREA)
+        mascara_rostro = cv2.resize(mascara_rostro.astype(np.uint8), tam, interpolation=cv2.INTER_NEAREST) == 1
+        puntos = [(x * f, y * f) for x, y in puntos]
     alto, ancho = ref_bgr.shape[:2]
     lab_r, lab_n = _convertir_a_lab_real(ref_bgr), _convertir_a_lab_real(alineada_bgr)
     rostro = mascara_rostro.astype(bool)
@@ -70,12 +79,18 @@ def analizar(ref_bgr, alineada_bgr, puntos, mascara_rostro) -> dict:
             "dL_local": round(float(d[0] - global_d[0]), 2), "da_local": round(float(d[1] - global_d[1]), 2),
             "db_local": round(float(d[2] - global_d[2]), 2),
         }
-    # Mapas de componentes (suavizados ≈ 1 % del ancho para no dibujar ruido del sensor)
-    s = max(1.5, ancho / 100)
-    # Se descuenta el cambio general del rostro: los mapas muestran lo LOCAL (el cambio parejo, típico de
-    # la luz, ya lo explica el texto) y no tiñen toda la cara cuando la foto salió un poco más oscura.
-    dL = cv2.GaussianBlur(lab_n[..., 0] - lab_r[..., 0] - global_d[0], (0, 0), s)
-    da = cv2.GaussianBlur(lab_n[..., 1] - lab_r[..., 1] - global_d[1], (0, 0), s)
+    # Mapas de componentes (suavizados ≈ 1 % del ancho para no dibujar ruido del sensor).
+    # Se descuenta el cambio general del rostro (los mapas muestran lo LOCAL; el cambio parejo, típico de la
+    # luz, ya lo explica el texto). El desenfoque es grande y suave: se calcula en una copia chica y se amplía.
+    red = min(1.0, 700 / ancho)
+
+    def suave(d):
+        chica = cv2.resize(d, None, fx=red, fy=red, interpolation=cv2.INTER_AREA) if red < 1 else d
+        chica = cv2.GaussianBlur(chica, (0, 0), max(1.5, chica.shape[1] / 100))
+        return cv2.resize(chica, (ancho, alto), interpolation=cv2.INTER_LINEAR) if red < 1 else chica
+
+    dL = suave(lab_n[..., 0] - lab_r[..., 0] - global_d[0])
+    da = suave(lab_n[..., 1] - lab_r[..., 1] - global_d[1])
     f = rostro.astype(np.float32)
     rojez = _superponer(alineada_bgr, (60, 50, 215), da / ESCALA_MAPA, f)          # más roja: rojo
     rojez = _superponer(rojez, (150, 160, 40), -da / ESCALA_MAPA, f)              # menos roja: verde azulado
