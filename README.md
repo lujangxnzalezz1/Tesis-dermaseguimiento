@@ -22,10 +22,8 @@ Matrícula N.º 2020101109
 Ingeniería Informática — UNIDA
 📧 lujangxnzalezz1@gmail.com
 
-## Tutores
+## Tutora
 
-- Ing. Lucía Caballero
-- Dr. Ariel Pedrozo
 - Mg. Laura Salinas
 
 ## Tecnologías
@@ -35,8 +33,9 @@ Ingeniería Informática — UNIDA
 | Backend | Python + FastAPI | 3.12.7 / 0.115 |
 | Base de datos | PostgreSQL | 18.3 |
 | Procesamiento de imágenes | OpenCV + MediaPipe | 4.x / 0.10.x |
-| Almacenamiento de imágenes | MinIO | Latest |
-| Aplicación móvil | React Native | Latest LTS |
+| Almacenamiento de imágenes | Disco / volumen Docker (claves opacas) | — |
+| Detección de lesiones | YOLOv8n (ONNX) entrenado con ACNE04 | 8.x |
+| Aplicación (web, iOS y Android) | React Native + Expo | Expo SDK 54 |
 | Contenedores | Docker | Latest |
 | Control de versiones | Git + GitHub | 2.54.0 |
 
@@ -164,9 +163,9 @@ Medición de RNF-06 (tiempo de procesamiento) con fotos reales: `python -m scrip
 | Fase 1 | Configuración del entorno | ✅ Completado |
 | Fase 2 | Estructura base del backend | ✅ Completado |
 | Fase 3 | Módulo de gestión clínica | ✅ Completado |
-| Fase 4 | Módulo de procesamiento de imágenes | 🔄 En progreso |
-| Fase 5 | Aplicación móvil React Native | 🔄 En progreso |
-| Fase 6 | Prueba piloto con dermatólogos | ⏳ Pendiente |
+| Fase 4 | Módulo de procesamiento de imágenes | ✅ Completado (validación: 50 pares, `scripts/validar_alineacion.py`) |
+| Fase 5 | Aplicación React Native / Expo | ✅ Completado |
+| Fase 6 | Prueba piloto con dermatólogos (SUS) | 🔄 Preparada (`scripts/preparar_piloto.py`) |
 
 ## Documentación de la API
 
