@@ -5,6 +5,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfgen import canvas
 
 from models.suscripcion import Comprobante
+from services.letras import formato_monto
 
 
 def generar_pdf(c: Comprobante, reimpreso: bool = False) -> bytes:
@@ -35,7 +36,7 @@ def generar_pdf(c: Comprobante, reimpreso: bool = False) -> bytes:
     bloque("Pagador", [c.pagador_nombre, f"Correo: {c.pagador_email}"])
     bloque("Detalle", [f"Concepto: {c.concepto}", f"Referencia de la transacción: {c.referencia}",
                        f"Período: {c.periodo or 'No aplica'}"])
-    bloque("Importe", [f"Total recibido: {c.monto} {c.moneda}", f"En letras: {c.monto_letras}", f"Forma de pago: {c.forma_pago}"])
+    bloque("Importe", [f"Total recibido: {formato_monto(c.monto, c.moneda)}", f"En letras: {c.monto_letras}", f"Forma de pago: {c.forma_pago}"])
     if c.estado == "anulado":
         bloque("ANULADO", [f"Anulado el {c.anulado_en:%Y-%m-%d %H:%M:%S}", f"Motivo: {c.motivo_anulacion or '-'}"])
     y -= 14 * mm

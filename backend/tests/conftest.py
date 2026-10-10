@@ -142,7 +142,7 @@ def firmar_evento(evento: dict, ts=None):
     return cuerpo, {"Content-Type": "application/json", "X-Pasarela-Timestamp": ts, "X-Pasarela-Firma": pasarela.firmar(cuerpo, ts)}
 
 
-def webhook(client, pago_ref, estado, monto, moneda="USD", evento_id="ev1", ts=None):
+def webhook(client, pago_ref, estado, monto, moneda="PYG", evento_id="ev1", ts=None):
     cuerpo, cab = firmar_evento({"evento_id": evento_id, "referencia": pago_ref, "estado": estado, "monto": monto, "moneda": moneda,
                                  "forma_pago": "Tarjeta (sandbox)"}, ts)
     return client.post("/webhooks/pago", content=cuerpo, headers=cab)

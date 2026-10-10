@@ -151,11 +151,13 @@ def exportar_pagos(
     db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual),
 ):
     filas = _consulta_pagos(db, usuario, estado, desde, hasta).order_by(Pago.id).all()
-    total_aprobado = sum(Decimal(p.monto) for p in filas if p.estado == "aprobado")
+    # El guaraní no tiene centavos: se exporta como entero
+    importe = lambda p: int(p.monto) if p.moneda == "PYG" else Decimal(p.monto)  # noqa: E731
+    total_aprobado = sum(importe(p) for p in filas if p.estado == "aprobado")
     audit.registrar(db, request, usuario, "pagos", "exportar_csv")
     return respuesta_csv(
         "Historial de pagos", ["Fecha", "Referencia", "Tipo", "Estado", "Monto", "Moneda"],
-        [(p.creado_en, p.referencia_externa, p.tipo, p.estado, Decimal(p.monto), p.moneda) for p in filas],
+        [(p.creado_en, p.referencia_externa, p.tipo, p.estado, importe(p), p.moneda) for p in filas],
         filtros={"estado": estado, "desde": desde, "hasta": hasta, "separador_decimal": decimal},
         totales={"Total aprobado": total_aprobado}, decimal=decimal, prefijo_archivo="pagos",
     )

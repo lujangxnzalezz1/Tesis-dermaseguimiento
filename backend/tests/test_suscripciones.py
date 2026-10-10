@@ -21,9 +21,9 @@ def test_planes_publicos_coinciden_con_las_reglas(client):
     planes = {p["codigo"]: p for p in r.json()["planes"]}
     assert set(planes) == {"gratuito", "premium_mensual", "premium_anual"}
     m = planes["premium_mensual"]
-    assert m["precio"] == "9.99" and m["periodicidad"] == "mensual" and m["duracion_dias"] == 30
+    assert Decimal(m["precio"]) == 149000 and m["moneda"] == "PYG" and m["periodicidad"] == "mensual" and m["duracion_dias"] == 30
     assert m["funcionalidades"] and m["limites"] and m["condiciones"] and m["incluye_procesamiento"]
-    assert planes["premium_anual"]["precio"] == "79.99" and planes["gratuito"]["incluye_procesamiento"] is False
+    assert Decimal(planes["premium_anual"]["precio"]) == 1190000 and planes["gratuito"]["incluye_procesamiento"] is False
 
 
 def test_usuario_nuevo_inicia_con_periodo_de_prueba(client, doc):
@@ -40,8 +40,8 @@ def test_pago_aprobado_activa_suscripcion_y_emite_comprobante(client, doc, db):
     comps = client.get("/comprobantes", headers=doc).json()["items"]
     assert len(comps) == 1
     c = comps[0]
-    assert re.fullmatch(r"REC-\d{6}", c["numero"]) and c["monto"] == "9.99" and c["moneda"] == "USD"
-    assert c["monto_letras"].startswith("Nueve dólares estadounidenses con 99/100") and "no constituye factura" in c["leyenda"].lower()
+    assert re.fullmatch(r"REC-\d{6}", c["numero"]) and Decimal(c["monto"]) == 149000 and c["moneda"] == "PYG"
+    assert c["monto_letras"] == "Ciento cuarenta y nueve mil guaraníes" and "no constituye factura" in c["leyenda"].lower()
     assert c["pagador_email"] == "doc1@example.com" and c["referencia"].startswith("SBX-") and c["forma_pago"]
     pagos = client.get("/pagos", headers=doc).json()["items"]
     assert pagos[0]["estado"] == "aprobado" and pagos[0]["comprobante_numero"] == c["numero"]
@@ -65,7 +65,7 @@ def test_webhook_duplicado_no_se_procesa_dos_veces(client, doc):
 def test_webhook_rechaza_notificaciones_no_autenticas(client, doc):
     info = client.post("/suscripcion/checkout", json={"plan_codigo": "premium_mensual"}, headers=doc).json()
     ref = info["url_pago"].rsplit("/", 1)[-1]
-    evento = {"evento_id": "e", "referencia": ref, "estado": "aprobado", "monto": info["monto"], "moneda": "USD"}
+    evento = {"evento_id": "e", "referencia": ref, "estado": "aprobado", "monto": info["monto"], "moneda": "PYG"}
     cuerpo, cab = firmar_evento(evento)
     assert client.post("/webhooks/pago", content=cuerpo).status_code == 401                              # sin firma
     assert client.post("/webhooks/pago", content=cuerpo, headers={**cab, "X-Pasarela-Firma": "0" * 64}).status_code == 401  # firma falsa
@@ -81,8 +81,8 @@ def test_webhook_valida_monto_y_referencia(client, doc):
     info = client.post("/suscripcion/checkout", json={"plan_codigo": "premium_mensual"}, headers=doc).json()
     ref = info["url_pago"].rsplit("/", 1)[-1]
     assert webhook(client, ref, "aprobado", "0.01").status_code == 400
-    assert webhook(client, ref, "aprobado", info["monto"], moneda="PYG").status_code == 400
-    assert webhook(client, "SBX-INEXISTENTE", "aprobado", "9.99").status_code == 404
+    assert webhook(client, ref, "aprobado", info["monto"], moneda="USD").status_code == 400
+    assert webhook(client, "SBX-INEXISTENTE", "aprobado", "149000").status_code == 404
     assert webhook(client, ref, "raro", info["monto"]).status_code == 400
     assert client.post("/webhooks/pago", content=b"no json", headers=firmar_evento({})[1]).status_code in (400, 401)
 
@@ -134,8 +134,9 @@ def test_mejora_de_plan_con_credito_proporcional(client, doc, db):
     db.commit()
     r = client.post("/suscripcion/checkout", json={"plan_codigo": "premium_anual"}, headers=doc).json()
     assert r["tipo"] == "cambio_plan"
-    esperado = Decimal("79.99") - Decimal("9.99") * Decimal(15) / Decimal(30)          # 74.99 (aprox.)
-    assert abs(Decimal(r["monto"]) - esperado) < Decimal("0.02") and Decimal(r["credito"]) > Decimal("4.9")
+    esperado = Decimal(1190000) - Decimal(149000) * Decimal(15) / Decimal(30)          # Gs. 1.115.500 (aprox.)
+    assert abs(Decimal(r["monto"]) - esperado) <= 100 and Decimal(r["credito"]) > 74000
+    assert Decimal(r["monto"]) == Decimal(r["monto"]).to_integral_value()               # el guaraní no tiene centavos
     ref = r["url_pago"].rsplit("/", 1)[-1]
     assert webhook(client, ref, "aprobado", r["monto"]).status_code == 200
     s = susc(client, doc)
@@ -254,6 +255,14 @@ def test_comprobante_se_puede_anular_solo_por_admin(client, doc, admin):
     assert client.post(f"/admin/comprobantes/{cid}/anular", json={"motivo": "Error de carga", "confirmar": True}, headers=admin).status_code == 409
 
 
+def test_monto_en_letras_y_formato_en_guaranies():
+    from services.letras import formato_monto
+    assert monto_en_letras(Decimal("149000"), "PYG") == "Ciento cuarenta y nueve mil guaraníes"
+    assert monto_en_letras(Decimal("1190000"), "PYG") == "Un millón ciento noventa mil guaraníes"
+    assert monto_en_letras(Decimal("21000"), "PYG") == "Veintiún mil guaraníes"
+    assert formato_monto(Decimal("1190000.00"), "PYG") == "Gs. 1.190.000" and formato_monto(Decimal("9.99"), "USD") == "USD 9,99"
+
+
 def test_monto_en_letras():
     assert monto_en_letras(Decimal("9.99")) == "Nueve dólares estadounidenses con 99/100"
     assert monto_en_letras(Decimal("79.99")) == "Setenta y nueve dólares estadounidenses con 99/100"
@@ -271,8 +280,8 @@ def test_exportar_pagos_csv(client, doc):
     t = r.content.decode("utf-8-sig").splitlines()
     assert t[0].startswith("Reporte;Historial de pagos") and t[1].startswith("Generado") and "estado=aprobado" in t[2]
     assert "Fecha;Referencia;Tipo;Estado;Monto;Moneda" in t
-    assert any(l.endswith(";aprobado;9,99;USD") for l in t) and "Total aprobado;9,99" in t and "Total de registros;1" in t
+    assert any(l.endswith(";aprobado;149000;PYG") for l in t) and "Total aprobado;149000" in t and "Total de registros;1" in t
     assert 'filename="pagos_' in r.headers["content-disposition"]
     p = client.get("/pagos.csv?decimal=punto", headers=doc).content.decode("utf-8-sig")
-    assert ";9.99;USD" in p
+    assert ";149000;PYG" in p
     assert client.get("/pagos.csv?estado=inventado", headers=doc).status_code == 422

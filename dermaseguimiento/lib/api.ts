@@ -88,3 +88,10 @@ export function fechaCorta(iso?: string | null): string {
   const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z'); // el servidor guarda UTC
   return d.toLocaleString('es-PY', { dateStyle: 'short', timeStyle: 'short' });
 }
+
+/** Importe para mostrar: «Gs. 149.000» (el guaraní no tiene centavos) o «USD 9,99». */
+export function formatoMonto(monto: string | number, moneda: string): string {
+  const n = Number(monto);
+  if (moneda === 'PYG') return `Gs. ${Math.round(n).toLocaleString('es-PY').replace(/,/g, '.')}`;
+  return `${moneda} ${n.toLocaleString('es-PY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}

@@ -14,15 +14,16 @@ from models.suscripcion import (
 )
 from models.usuario import Usuario
 from services import email_service
-from services.letras import monto_en_letras
+from services.letras import formato_monto, monto_en_letras
 from services.pasarela import obtener_pasarela
 
 CENT = Decimal("0.01")
 ESTADOS_CON_ACCESO = (EST_PRUEBA, EST_ACTIVA, EST_CANCELADA)  # 'cancelada' conserva acceso hasta el vencimiento
 
 
-def _dinero(x) -> Decimal:
-    return Decimal(str(x)).quantize(CENT, rounding=ROUND_HALF_UP)
+def _dinero(x, moneda: str = "PYG") -> Decimal:
+    """Redondeo según la moneda: el guaraní no tiene centavos."""
+    return Decimal(str(x)).quantize(Decimal("1") if moneda == "PYG" else CENT, rounding=ROUND_HALF_UP)
 
 
 def plan_por_codigo(db: Session, codigo: str) -> Plan:
@@ -131,18 +132,18 @@ def calcular_cobro(db: Session, susc: Suscripcion, nuevo: Plan) -> dict:
         return {"accion": "programar", "tipo": "cambio_plan", "monto": cero, "credito": cero}
 
     if not vigente or actual.periodicidad == "gratuito" or susc.es_prueba:
-        return {"accion": "cobrar", "tipo": "alta", "monto": _dinero(nuevo.precio), "credito": cero}
+        return {"accion": "cobrar", "tipo": "alta", "monto": _dinero(nuevo.precio, nuevo.moneda), "credito": cero}
 
     if actual.id == nuevo.id:
-        return {"accion": "cobrar", "tipo": "renovacion", "monto": _dinero(nuevo.precio), "credito": cero}
+        return {"accion": "cobrar", "tipo": "renovacion", "monto": _dinero(nuevo.precio, nuevo.moneda), "credito": cero}
 
-    if _dinero(nuevo.precio) < _dinero(actual.precio):
+    if _dinero(nuevo.precio, nuevo.moneda) < _dinero(actual.precio, actual.moneda):
         return {"accion": "programar", "tipo": "cambio_plan", "monto": cero, "credito": cero}
 
     # Mejora de plan: se acredita el tiempo no usado del plan actual (prorrata por días)
     restantes = max(0.0, (susc.fecha_vencimiento - ahora()).total_seconds() / 86400) if susc.fecha_vencimiento else 0.0
-    credito = _dinero(Decimal(str(actual.precio)) * Decimal(str(restantes)) / Decimal(actual.duracion_dias or 1))
-    monto = max(cero, _dinero(nuevo.precio) - credito)
+    credito = _dinero(Decimal(str(actual.precio)) * Decimal(str(restantes)) / Decimal(actual.duracion_dias or 1), nuevo.moneda)
+    monto = max(cero, _dinero(nuevo.precio, nuevo.moneda) - credito)
     return {"accion": "cobrar", "tipo": "cambio_plan", "monto": monto, "credito": credito}
 
 
@@ -185,7 +186,7 @@ def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> di
     return {
         "accion": "pago", "pago_id": pago.id, "url_pago": url, "monto": str(calculo["monto"]),
         "credito": str(calculo["credito"]), "moneda": nuevo.moneda, "tipo": calculo["tipo"],
-        "mensaje": f"Vas a pagar {calculo['monto']} {nuevo.moneda} por el plan «{nuevo.nombre}».",
+        "mensaje": f"Vas a pagar {formato_monto(calculo['monto'], nuevo.moneda)} por el plan «{nuevo.nombre}».",
     }
 
 
@@ -235,7 +236,7 @@ def aplicar_pago_aprobado(db: Session, pago: Pago) -> Comprobante:
     db.flush()
     comp.numero = f"REC-{comp.id:06d}"  # autonumerado por la clave primaria: no puede repetirse
     hasta = f" hasta el {susc.fecha_vencimiento.date().isoformat()}." if susc.fecha_vencimiento else "."
-    mensaje = f"Recibimos tu pago de {pago.monto} {pago.moneda}. Tu plan «{plan.nombre}» está activo{hasta}"
+    mensaje = f"Recibimos tu pago de {formato_monto(pago.monto, pago.moneda)}. Tu plan «{plan.nombre}» está activo{hasta}"
     _crear_notificacion(db, usuario, f"pago:{pago.id}", "pago", mensaje)
     db.commit()
     email_service.enviar(db, usuario.email, "pago_aprobado", {"nombre": usuario.nombre, "mensaje": mensaje, "numero": comp.numero})

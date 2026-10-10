@@ -18,22 +18,21 @@ from models.usuario import ROL_ADMIN, Usuario
 from services.email_service import PLANTILLAS_POR_DEFECTO
 
 PLANES = [
-    dict(codigo="gratuito", nombre="Gratuito", precio=0, periodicidad="gratuito", duracion_dias=0, orden=1,
+    dict(codigo="gratuito", nombre="Gratuito", precio=0, moneda="PYG", periodicidad="gratuito", duracion_dias=0, orden=1,
          incluye_procesamiento=False,
          funcionalidades=["Registro de pacientes y fichas clínicas digitales", "Historial de consultas", "Consulta de información"],
          limites=["Sin procesamiento de imágenes", "Sin reportes de evolución"],
          condiciones="Sin costo ni vencimiento. Podés pasar a Premium cuando quieras."),
-    dict(codigo="premium_mensual", nombre="Premium mensual", precio=9.99, periodicidad="mensual", duracion_dias=30, orden=2,
+    dict(codigo="premium_mensual", nombre="Premium mensual", precio=149000, moneda="PYG", periodicidad="mensual", duracion_dias=30, orden=2,
          incluye_procesamiento=True,
-         funcionalidades=["Todo lo del plan Gratuito", "Alineación de fotografías con puntos faciales", "Análisis colorimétrico CIE Lab con mapa de calor",
-                          "Reportes de evolución ilimitados (CSV)"],
+         funcionalidades=["Todo lo del plan Gratuito", "Comparación alineada de fotografías (antes/después con capas)", "Análisis de color por zona, manchas, textura y ojeras", "Detección de lesiones de acné (YOLOv8)", "Valoración clínica (IGA, mMASI) y foto con luz UV", "Informe en PDF para el paciente e indicaciones con plantillas", "Gráfico de evolución y reportes CSV ilimitados"],
          limites=["Uso profesional individual"],
-         condiciones="Cobro cada 30 días (USD). Cancelás cuando quieras y conservás el acceso hasta el fin del período pagado. Sin reembolsos proporcionales."),
-    dict(codigo="premium_anual", nombre="Premium anual", precio=79.99, periodicidad="anual", duracion_dias=365, orden=3,
+         condiciones="Gs. 149.000 cada 30 días, IVA incluido. Cancelás cuando quieras y conservás el acceso hasta el fin del período pagado. Sin reembolsos proporcionales."),
+    dict(codigo="premium_anual", nombre="Premium anual", precio=1190000, moneda="PYG", periodicidad="anual", duracion_dias=365, orden=3,
          incluye_procesamiento=True,
-         funcionalidades=["Todo lo del plan Premium mensual", "Ahorro frente al pago mensual (aprox. 33 %)"],
+         funcionalidades=["Todo lo del plan Premium mensual", "Ahorro frente al pago mensual (aprox. 33 %, unos 4 meses gratis)"],
          limites=["Uso profesional individual"],
-         condiciones="Cobro único por 365 días (USD). Al mejorar desde el mensual se acredita el tiempo no usado. Sin reembolsos proporcionales."),
+         condiciones="Gs. 1.190.000 por 365 días, IVA incluido (unos 4 meses gratis). Al mejorar desde el mensual se acredita el tiempo no usado. Sin reembolsos proporcionales."),
 ]
 
 

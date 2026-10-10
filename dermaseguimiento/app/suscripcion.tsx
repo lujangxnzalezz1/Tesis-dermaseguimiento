@@ -4,7 +4,7 @@ import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import { API_URL, obtenerToken } from '../lib/auth';
 import { useFocusEffect } from 'expo-router';
 import { Aviso, Boton, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
-import { api, fechaCorta, mensaje } from '../lib/api';
+import { api, fechaCorta, formatoMonto, mensaje } from '../lib/api';
 
 const ETIQUETA_ESTADO: Record<string, string> = {
   prueba: 'Período de prueba', activa: 'Activa', vencida: 'Vencida', cancelada: 'Cancelada (activa hasta el vencimiento)', pendiente_pago: 'Pendiente de pago',
@@ -112,7 +112,7 @@ export default function SuscripcionScreen() {
       {planes.map((p) => (
         <Tarjeta key={p.codigo} color={p.codigo === actual ? '#E8F5E9' : COLOR.suave}>
           <Text style={{ fontSize: 17, fontFamily: FUENTE.titulo, color: COLOR.primario }}>{p.nombre}</Text>
-          <Text style={{ fontSize: 16 }}>{p.periodicidad === 'gratuito' ? 'Gratis' : `${p.precio} ${p.moneda} / ${p.periodicidad === 'mensual' ? 'mes' : 'año'}`}</Text>
+          <Text style={{ fontSize: 16 }}>{p.periodicidad === 'gratuito' ? 'Gratis' : `${formatoMonto(p.precio, p.moneda)} / ${p.periodicidad === 'mensual' ? 'mes' : 'año'} (IVA incluido)`}</Text>
           {p.funcionalidades.map((f: string) => <Text key={f}>• {f}</Text>)}
           {p.limites.map((f: string) => <Text key={f} style={{ color: COLOR.textoSuave }}>– {f}</Text>)}
           <Text style={{ color: COLOR.textoSuave, marginTop: 6, fontSize: 12 }}>{p.condiciones}</Text>
@@ -128,7 +128,7 @@ export default function SuscripcionScreen() {
       {pagos.map((p) => (
         <View key={p.id} style={{ paddingVertical: 8, borderBottomWidth: 1, borderColor: '#eee' }}>
           <Text style={{ fontFamily: FUENTE.textoFuerte }}>{fechaCorta(p.fecha)} — {p.plan}</Text>
-          <Text>{p.monto} {p.moneda} · {p.estado}{p.comprobante_numero ? ` · Comprobante ${p.comprobante_numero}` : ''}</Text>
+          <Text>{formatoMonto(p.monto, p.moneda)} · {p.estado}{p.comprobante_numero ? ` · Comprobante ${p.comprobante_numero}` : ''}</Text>
           {p.comprobante_id && (
             <Boton texto="Descargar comprobante (PDF)" icono="download-outline" variante="texto" onPress={() => descargarComprobante(p.comprobante_id, p.comprobante_numero)} />
           )}

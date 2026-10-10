@@ -26,7 +26,7 @@ class Plan(Base):
     codigo = Column(String, unique=True, nullable=False)
     nombre = Column(String, nullable=False)
     precio = Column(Numeric(10, 2), nullable=False, default=0)
-    moneda = Column(String, nullable=False, default="USD")
+    moneda = Column(String, nullable=False, default="PYG")
     periodicidad = Column(String, nullable=False)  # gratuito | mensual | anual
     duracion_dias = Column(Integer, nullable=False, default=0)  # 0 = sin vencimiento
     funcionalidades = Column(Text, nullable=False, default="[]")  # JSON: lista de textos

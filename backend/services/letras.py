@@ -33,7 +33,21 @@ def entero_en_letras(n: int) -> str:
     return pref if resto == 0 else f"{pref} {entero_en_letras(resto)}"
 
 
+def formato_monto(monto, moneda: str) -> str:
+    """Importe para mostrar: «Gs. 149.000» (sin decimales) o «USD 9,99»."""
+    if moneda == "PYG":
+        return "Gs. " + f"{int(round(float(monto))):,}".replace(",", ".")
+    return f"{moneda} " + f"{float(monto):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
 def monto_en_letras(monto, moneda: str = "USD") -> str:
+    if moneda == "PYG":  # el guaraní no usa centavos
+        n = int(round(float(monto)))
+        letras = entero_en_letras(n)
+        if n % 10 == 1 and n % 100 != 11 and letras.endswith("uno"):
+            letras = letras[:-3] + "ún"
+        letras = letras.replace("veintiun ", "veintiún ")
+        return f"{letras.capitalize()} guaraníes"
     entero = int(monto)
     centavos = int(round((float(monto) - entero) * 100))
     nombre = {"USD": "dólares estadounidenses", "PYG": "guaraníes"}.get(moneda, moneda)

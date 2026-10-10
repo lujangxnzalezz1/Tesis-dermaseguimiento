@@ -13,6 +13,7 @@ from core.config import settings
 from core.database import get_db
 from models.suscripcion import PAGO_APROBADO, PAGO_CANCELADO, PAGO_PENDIENTE, PAGO_RECHAZADO, Pago
 from core.tiempo import ahora
+from services.letras import formato_monto
 from services import auditoria_service as audit
 from services import pasarela
 from services.suscripcion_service import aplicar_pago_aprobado
@@ -102,7 +103,7 @@ if settings.PASARELA == "sandbox":
         if pago.estado != PAGO_PENDIENTE:
             return _pagina("Pago finalizado", f"<h2>Esta operación ya fue {escape(pago.estado)}</h2><p>Podés volver a la app.</p>")
         return _pagina("Pasarela de pruebas", f"""
-<h2>Pasarela de pruebas (sandbox)</h2><p><b>{escape(str(pago.monto))} {escape(pago.moneda)}</b><br><small>Ref. {escape(referencia)}</small></p>
+<h2>Pasarela de pruebas (sandbox)</h2><p><b>{escape(formato_monto(pago.monto, pago.moneda))}</b><br><small>Ref. {escape(referencia)}</small></p>
 <small>Entorno de prueba: no se realiza ningún cobro real. El resultado se informa al sistema con un webhook firmado.</small>
 <form method="post" action="/pasarela-sandbox/decidir"><input type="hidden" name="referencia" value="{escape(referencia)}">
 <button class="ok" name="decision" value="aprobado">Pagar (aprobar)</button>
