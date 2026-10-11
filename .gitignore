@@ -24,9 +24,6 @@ Thumbs.db
 # ---------- Pruebas y herramientas ----------
 .pytest_cache/
 backend/.pytest_cache/
-.claude/
-dermaseguimiento/.claude/
-dermaseguimiento/CLAUDE.md
 dermaseguimiento/AGENTS.md
 Tesis_respaldos/
 *.sql
