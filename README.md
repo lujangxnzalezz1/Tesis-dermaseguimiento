@@ -240,3 +240,5 @@ Los datos por par están en `backend/resultados_validacion/validacion_alineacion
 Ingeniería Informática, Universidad de la Integración de las Américas (UNIDA)
 Tutora: Mg. Laura Salinas
 Asunción, Paraguay, 2026
+
+Última actualización: octubre de 2026.
