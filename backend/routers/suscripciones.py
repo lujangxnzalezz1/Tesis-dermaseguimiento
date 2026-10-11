@@ -107,6 +107,7 @@ def estado_pago(pago_id: int, db: Session = Depends(get_db), usuario: Usuario = 
     pago = db.query(Pago).filter(Pago.id == pago_id, Pago.usuario_id == usuario.id).first()
     if not pago:
         raise HTTPException(404, "No encontramos ese pago.")
+    pago = svc.verificar_pago_externo(db, pago)
     comp = db.query(Comprobante).filter(Comprobante.pago_id == pago.id).first()
     return {"id": pago.id, "estado": pago.estado, "monto": str(pago.monto), "moneda": pago.moneda,
             "referencia": pago.referencia_externa, "comprobante_id": comp.id if comp else None}

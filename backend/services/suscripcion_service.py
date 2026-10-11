@@ -13,9 +13,9 @@ from models.suscripcion import (
     Comprobante, HistorialSuscripcion, Notificacion, Pago, Plan, Suscripcion,
 )
 from models.usuario import Usuario
-from services import email_service
+from services import email_service, push_service
 from services.letras import formato_monto, monto_en_letras
-from services.pasarela import obtener_pasarela
+from services.pasarela import ErrorPasarela, obtener_pasarela
 
 CENT = Decimal("0.01")
 ESTADOS_CON_ACCESO = (EST_PRUEBA, EST_ACTIVA, EST_CANCELADA)  # 'cancelada' conserva acceso hasta el vencimiento
@@ -178,7 +178,10 @@ def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> di
         return {"accion": "aplicada", "mensaje": f"Tu plan cambió a «{nuevo.nombre}». El crédito de tu plan anterior cubrió el importe."}
 
     pasarela = obtener_pasarela()
-    referencia, url = pasarela.crear_operacion(calculo["monto"], nuevo.moneda, f"Suscripción {nuevo.nombre}")
+    try:
+        referencia, url = pasarela.crear_operacion(calculo["monto"], nuevo.moneda, f"Suscripción {nuevo.nombre}")
+    except ErrorPasarela:
+        raise HTTPException(502, "No pudimos conectar con la pasarela de pagos. Intentá de nuevo en unos minutos; no se realizó ningún cobro.")
     pago = Pago(usuario_id=usuario.id, suscripcion_id=susc.id, plan_id=nuevo.id, tipo=calculo["tipo"], monto=calculo["monto"],
                 moneda=nuevo.moneda, estado=PAGO_PENDIENTE, proveedor=pasarela.nombre, referencia_externa=referencia)
     db.add(pago)
@@ -191,6 +194,33 @@ def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> di
 
 
 # --------------------------------------------------------------------------- pago aprobado
+
+def verificar_pago_externo(db: Session, pago: Pago) -> Pago:
+    """Para pasarelas que se consultan (AdamsPay): si la deuda figura pagada y el monto coincide,
+    aprueba el pago una sola vez. Un fallo de conexión deja el pago pendiente."""
+    if pago.estado != PAGO_PENDIENTE or pago.proveedor != "adamspay":
+        return pago
+    pasarela = obtener_pasarela()
+    if not hasattr(pasarela, "consultar"):
+        return pago
+    try:
+        estado = pasarela.consultar(pago.referencia_externa)
+    except (ErrorPasarela, KeyError, TypeError):
+        return pago
+    if not estado["pagado"]:
+        return pago
+    pago = db.query(Pago).filter(Pago.id == pago.id).with_for_update().first()
+    if pago.estado != PAGO_PENDIENTE:
+        return pago
+    if estado["monto"] != Decimal(pago.monto) or estado["moneda"] != pago.moneda:
+        return pago  # no se aprueba un pago cuyo monto no coincide
+    pago.estado = PAGO_APROBADO
+    pago.forma_pago = "AdamsPay"
+    pago.actualizado_en = ahora()
+    db.flush()
+    aplicar_pago_aprobado(db, pago)
+    return pago
+
 
 def aplicar_pago_aprobado(db: Session, pago: Pago) -> Comprobante:
     """Activa/extiende la suscripción, registra el historial y emite el comprobante.
@@ -240,6 +270,7 @@ def aplicar_pago_aprobado(db: Session, pago: Pago) -> Comprobante:
     _crear_notificacion(db, usuario, f"pago:{pago.id}", "pago", mensaje)
     db.commit()
     email_service.enviar(db, usuario.email, "pago_aprobado", {"nombre": usuario.nombre, "mensaje": mensaje, "numero": comp.numero})
+    push_service.enviar(usuario.id, "Pago recibido", mensaje)
     return comp
 
 
@@ -300,6 +331,8 @@ def generar_avisos(db: Session, usuario: Usuario, enviar_correo: bool = True) ->
             if n:
                 pendientes.append((n, "suscripcion_vencida", msg))
     db.commit()
+    for n, _, msg in pendientes:
+        push_service.enviar(usuario.id, "Tu suscripción", msg)
     if enviar_correo:
         for n, codigo, msg in pendientes:
             if email_service.enviar(db, usuario.email, codigo, {"nombre": usuario.nombre, "mensaje": msg}):

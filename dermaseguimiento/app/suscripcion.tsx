@@ -35,7 +35,7 @@ export default function SuscripcionScreen() {
   useFocusEffect(useCallback(() => { cargar(); }, [cargar]));
 
   const esperarResultado = async (pagoId: number) => {
-    for (let i = 0; i < 15; i++) {
+    for (let i = 0; i < 90; i++) { // hasta 3 minutos para completar el pago
       const r = await api(`/pagos/${pagoId}`);
       if (r.ok && r.data.estado !== 'pendiente') return r.data.estado as string;
       await new Promise((res) => setTimeout(res, 2000));

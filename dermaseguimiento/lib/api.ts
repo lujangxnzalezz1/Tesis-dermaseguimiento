@@ -1,6 +1,7 @@
 import { router } from 'expo-router';
 import { avisar } from './dialogo';
 import { API_URL, borrarToken, obtenerToken } from './auth';
+import { desvincularUsuarioPush } from './push';
 
 export type RespuestaApi<T = any> = { ok: boolean; status: number; data: T };
 
@@ -79,6 +80,7 @@ export function mensaje(r: RespuestaApi, porDefecto = 'No se pudo completar la o
 
 export async function cerrarSesion() {
   await api('/logout', { method: 'POST' });
+  desvincularUsuarioPush();
   await borrarToken();
   irAlLogin();
 }

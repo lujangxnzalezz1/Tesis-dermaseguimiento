@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ActivityIndicator, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Aviso, Boton, BotonIcono, Campo, Casilla, COLOR, Confirmar, Iniciales, Pantalla, Pildora, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
 import { api, cerrarSesion, mensaje } from '../lib/api';
+import { vincularUsuarioPush } from '../lib/push';
 import { CampoFecha, haceAniosTexto, hoyTexto } from '../components/CampoFecha';
 
 type Paciente = {
@@ -63,7 +64,10 @@ export default function PacientesScreen() {
     useCallback(() => {
       (async () => {
         const [pf, sc, nt] = await Promise.all([api('/perfil'), api('/suscripcion'), api('/notificaciones')]);
-        if (pf.ok) setPerfil(pf.data);
+        if (pf.ok) {
+          setPerfil(pf.data);
+          vincularUsuarioPush(pf.data.id);
+        }
         if (sc.ok) setSusc(sc.data);
         if (nt.ok) {
           setNoLeidas(nt.data.no_leidas);

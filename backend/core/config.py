@@ -124,6 +124,9 @@ class Settings(BaseSettings):
     PASARELA: str = "sandbox"
     PASARELA_WEBHOOK_SECRET: str = Field(min_length=16)  # obligatorio: sin valor por defecto conocido
     PASARELA_WEBHOOK_TOLERANCIA_SEGUNDOS: int = 300
+    # AdamsPay (PASARELA=adamspay). Pruebas: staging; producción: https://checkout.adamspay.com/api/v1
+    ADAMSPAY_API_URL: str = "https://staging.adamspay.com/api/v1"
+    ADAMSPAY_API_KEY: str = ""
     BASE_URL: str = "http://localhost:8000"
     # Orígenes web permitidos (versión web de la app). Separados por coma.
     CORS_ORIGINS: str = "http://localhost:8081,http://127.0.0.1:8081"
@@ -144,6 +147,11 @@ class Settings(BaseSettings):
     SMTP_FROM_NAME: str = "DermaSeguimiento"
     SMTP_TIMEOUT_SECONDS: int = 10
     SMTP_ENABLED: bool = False
+
+    # --- Notificaciones push (OneSignal; sin clave no se envían) ---
+    ONESIGNAL_APP_ID: str = ""
+    ONESIGNAL_REST_API_KEY: str = ""
+    ONESIGNAL_TIMEOUT_SECONDS: int = 10
 
     # --- Datos iniciales (script `python -m scripts.seed`) ---
     ADMIN_EMAIL: str = ""

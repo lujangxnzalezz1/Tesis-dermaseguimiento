@@ -15,6 +15,8 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from typing import Optional
 
 from core.config import settings
@@ -52,7 +54,56 @@ class PasarelaSandbox:
         return referencia, f"{url_base()}/pasarela-sandbox/checkout/{referencia}"
 
 
-def obtener_pasarela() -> PasarelaSandbox:
+class ErrorPasarela(Exception):
+    pass
+
+
+class PasarelaAdamsPay:
+    """AdamsPay (Paraguay): cada pago es una «deuda» con una URL de pago propia.
+    El estado se consulta al API con la apikey; no depende de un webhook público."""
+    nombre = "adamspay"
+
+    def _llamar(self, metodo: str, ruta: str, cuerpo: Optional[dict] = None) -> dict:
+        req = urllib.request.Request(
+            settings.ADAMSPAY_API_URL.rstrip("/") + ruta, method=metodo,
+            data=json.dumps(cuerpo).encode() if cuerpo is not None else None,
+            headers={"apikey": settings.ADAMSPAY_API_KEY, "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as r:
+                return json.loads(r.read().decode())
+        except urllib.error.HTTPError as e:
+            raise ErrorPasarela(f"AdamsPay respondió {e.code}: {e.read().decode()[:300]}")
+        except (urllib.error.URLError, TimeoutError) as e:
+            raise ErrorPasarela(f"No se pudo conectar con AdamsPay: {e}")
+
+    def crear_operacion(self, pago_monto, moneda: str, descripcion: str) -> tuple[str, str]:
+        referencia = "DS-" + uuid.uuid4().hex[:20].upper()
+        inicio = datetime.now(timezone.utc).replace(microsecond=0)
+        fin = inicio + timedelta(days=1)
+        deuda = {
+            "docId": referencia, "label": descripcion,
+            "amount": {"currency": moneda, "value": str(int(pago_monto))},
+            "validPeriod": {"start": inicio.strftime("%Y-%m-%dT%H:%M:%S"), "end": fin.strftime("%Y-%m-%dT%H:%M:%S")},
+        }
+        r = self._llamar("POST", "/debts", {"debt": deuda})
+        try:
+            return referencia, r["debt"]["payUrl"]
+        except (KeyError, TypeError):
+            raise ErrorPasarela(f"Respuesta inesperada de AdamsPay: {str(r)[:300]}")
+
+    def consultar(self, referencia: str) -> dict:
+        """Devuelve {'pagado': bool, 'monto': Decimal, 'moneda': str} según el estado de la deuda."""
+        d = self._llamar("GET", f"/debts/{referencia}")["debt"]
+        return {"pagado": d["payStatus"]["status"] == "paid",
+                "monto": Decimal(str(d["amount"]["value"])), "moneda": d["amount"]["currency"]}
+
+
+def obtener_pasarela():
+    if settings.PASARELA == "adamspay":
+        if not settings.ADAMSPAY_API_KEY:
+            raise RuntimeError("Falta ADAMSPAY_API_KEY para usar la pasarela AdamsPay.")
+        return PasarelaAdamsPay()
     if settings.PASARELA == "sandbox":
         return PasarelaSandbox()
     raise RuntimeError(f"Pasarela «{settings.PASARELA}» no implementada.")
