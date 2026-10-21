@@ -3,18 +3,24 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from sqlalchemy import or_
+from sqlalchemy import and_, case, exists, func, or_
 from sqlalchemy.orm import Session
 
+from core.config import settings
 from core.crypto import cifrar
 from core.database import get_db
 from core.security import requiere_rol, revocar_sesiones_de_usuario
 from core.tiempo import ahora
 from models.auditoria import Auditoria
 from models.configuracion import ConfiguracionCorreo, PlantillaCorreo, RespuestaSUS
-from models.suscripcion import Comprobante, Pago, Plan, Suscripcion
+from models.paciente import Paciente
+from models.suscripcion import (
+    EST_CANCELADA, EST_VENCIDA, PAGO_PENDIENTE, Comprobante, Pago, Plan, Suscripcion,
+)
 from models.usuario import ROL_ADMIN, ROLES, Usuario
+from routers import pacientes as pacientes_router
 from schemas.comunes import limpiar_texto
+from schemas.paciente import PacienteReactivar
 from schemas.usuario import CambioEstadoUsuario, UsuarioAdminRespuesta
 from services import auditoria_service as audit
 from services import email_service
@@ -126,28 +132,82 @@ def cambiar_rol(uid: int, datos: CambioRol, request: Request, db: Session = Depe
 
 # ----------------------------------------------------------------- suscripciones (pantalla administrativa)
 
+CATEGORIAS = ("activa", "proxima_a_vencer", "vencida", "cancelada", "pendiente_pago")
+
+
+def _expresion_categoria():
+    """La misma regla que `svc.clasificar`, pero en SQL: así se filtra, cuenta y pagina en la base
+    (antes se traían todas las suscripciones y se consultaba un pago pendiente por cada una)."""
+    hay_pendiente = exists().where(and_(Pago.suscripcion_id == Suscripcion.id, Pago.estado == PAGO_PENDIENTE))
+    limite = ahora() + timedelta(days=max(settings.avisos_dias or [7]))
+    return case(
+        (Suscripcion.estado == EST_CANCELADA, "cancelada"),
+        (and_(Suscripcion.estado == EST_VENCIDA, hay_pendiente), "pendiente_pago"),
+        (Suscripcion.estado == EST_VENCIDA, "vencida"),
+        (and_(Suscripcion.fecha_vencimiento.isnot(None), Suscripcion.fecha_vencimiento <= limite), "proxima_a_vencer"),
+        else_="activa",
+    )
+
+
+def _sincronizar_vencidas(db: Session) -> None:
+    """Aplica los vencimientos pendientes solo a las suscripciones que ya pasaron su fecha (normalmente pocas)."""
+    for susc in (db.query(Suscripcion)
+                 .filter(Suscripcion.estado.in_(svc.ESTADOS_CON_ACCESO), Suscripcion.fecha_vencimiento.isnot(None),
+                         Suscripcion.fecha_vencimiento <= ahora())
+                 .all()):
+        svc.sincronizar(db, susc)
+
+
 @router.get("/suscripciones")
 def listar_suscripciones(
     categoria: Optional[str] = Query(None, pattern="^(activa|proxima_a_vencer|vencida|cancelada|pendiente_pago)$"),
     q: Optional[str] = Query(None, max_length=80), pagina: int = Query(1, ge=1), tamano: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db), _: Usuario = Depends(solo_admin),
 ):
-    consulta = db.query(Suscripcion, Usuario, Plan).join(Usuario, Usuario.id == Suscripcion.usuario_id).join(Plan, Plan.id == Suscripcion.plan_id)
+    _sincronizar_vencidas(db)
+    expr = _expresion_categoria()
+    base = db.query(Suscripcion, Usuario, Plan, expr.label("categoria")).join(Usuario, Usuario.id == Suscripcion.usuario_id).join(Plan, Plan.id == Suscripcion.plan_id)
     if q:
-        consulta = consulta.filter(or_(Usuario.email.ilike(f"%{q}%"), Usuario.nombre.ilike(f"%{q}%")))
-    filas, resumen = [], {"activa": 0, "proxima_a_vencer": 0, "vencida": 0, "cancelada": 0, "pendiente_pago": 0}
-    for susc, usuario, plan in consulta.order_by(Suscripcion.id).all():
-        susc = svc.sincronizar(db, susc)
-        pendiente = db.query(Pago).filter(Pago.suscripcion_id == susc.id, Pago.estado == "pendiente").count() > 0
-        cat = svc.clasificar(susc, pendiente)
-        resumen[cat] += 1
-        if categoria and cat != categoria:
-            continue
-        filas.append({"suscripcion_id": susc.id, "usuario": usuario.nombre, "email": usuario.email, "plan": plan.nombre,
-                      "estado": susc.estado, "categoria": cat, "fecha_vencimiento": susc.fecha_vencimiento,
-                      "dias_restantes": svc.dias_restantes(susc), "es_prueba": susc.es_prueba})
-    inicio = (pagina - 1) * tamano
-    return {"items": filas[inicio:inicio + tamano], "total": len(filas), "pagina": pagina, "tamano": tamano, "resumen": resumen}
+        base = base.filter(or_(Usuario.email.ilike(f"%{q}%"), Usuario.nombre.ilike(f"%{q}%")))
+    # Resumen por categoría (sobre la búsqueda, sin el filtro de categoría) con un GROUP BY
+    sub = base.subquery()
+    resumen = {c: 0 for c in CATEGORIAS}
+    for c, n in db.query(sub.c.categoria, func.count()).group_by(sub.c.categoria).all():
+        resumen[c] = n
+    if categoria:
+        base = base.filter(expr == categoria)
+    total = resumen[categoria] if categoria else sum(resumen.values())
+    filas = base.order_by(Suscripcion.id).offset((pagina - 1) * tamano).limit(tamano).all()
+    items = [{"suscripcion_id": susc.id, "usuario": usuario.nombre, "email": usuario.email, "plan": plan.nombre,
+              "estado": susc.estado, "categoria": c, "fecha_vencimiento": susc.fecha_vencimiento,
+              "dias_restantes": svc.dias_restantes(susc), "es_prueba": susc.es_prueba}
+             for susc, usuario, plan, c in filas]
+    return {"items": items, "total": total, "pagina": pagina, "tamano": tamano, "resumen": resumen}
+
+
+# ----------------------------------------------------------------- comprobantes
+
+@router.get("/comprobantes")
+def listar_comprobantes(
+    q: Optional[str] = Query(None, max_length=80, description="Número, nombre o correo del pagador"),
+    estado: Optional[str] = Query(None, pattern="^(emitido|anulado|reimpreso)$"),
+    pagina: int = Query(1, ge=1), tamano: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db), _: Usuario = Depends(solo_admin),
+):
+    consulta = db.query(Comprobante)
+    if q:
+        patron = f"%{q.strip()}%"
+        consulta = consulta.filter(or_(Comprobante.numero.ilike(patron), Comprobante.pagador_nombre.ilike(patron),
+                                       Comprobante.pagador_email.ilike(patron)))
+    if estado:
+        consulta = consulta.filter(Comprobante.estado == estado)
+    total = consulta.count()
+    filas = consulta.order_by(Comprobante.id.desc()).offset((pagina - 1) * tamano).limit(tamano).all()
+    return {"items": [{"id": c.id, "numero": c.numero, "fecha_emision": c.fecha_emision, "estado": c.estado,
+                       "pagador_nombre": c.pagador_nombre, "pagador_email": c.pagador_email, "concepto": c.concepto,
+                       "monto": str(c.monto), "moneda": c.moneda, "anulado_en": c.anulado_en, "motivo_anulacion": c.motivo_anulacion}
+                      for c in filas],
+            "total": total, "pagina": pagina, "tamano": tamano}
 
 
 class Anulacion(BaseModel):
@@ -174,6 +234,39 @@ def anular_comprobante(cid: int, datos: Anulacion, request: Request, db: Session
     db.commit()
     audit.registrar(db, request, admin, "comprobantes", "anular", entidad="comprobante", entidad_id=c.id, detalle=datos.motivo)
     return {"mensaje": f"El comprobante {c.numero} fue anulado."}
+
+
+# ----------------------------------------------------------------- pacientes dados de baja
+
+@router.get("/pacientes-baja")
+def listar_pacientes_baja(
+    q: Optional[str] = Query(None, max_length=80, description="Cédula, nombre o apellido"),
+    pagina: int = Query(1, ge=1), tamano: int = Query(20, ge=1, le=100),
+    db: Session = Depends(get_db), _: Usuario = Depends(solo_admin),
+):
+    """Solo los datos necesarios para identificar la ficha a recuperar (no se exponen datos clínicos)."""
+    consulta = (db.query(Paciente, Usuario.email).join(Usuario, Usuario.id == Paciente.dermatologo_id)
+                .filter(Paciente.activo.is_(False)))
+    if q:
+        patron = f"%{q.strip()}%"
+        consulta = consulta.filter(or_(Paciente.cedula.ilike(patron), Paciente.nombre.ilike(patron), Paciente.apellido.ilike(patron)))
+    total = consulta.count()
+    filas = consulta.order_by(Paciente.eliminado_en.desc(), Paciente.id.desc()).offset((pagina - 1) * tamano).limit(tamano).all()
+    return {"items": [{"id": p.id, "cedula": p.cedula, "nombre": p.nombre, "apellido": p.apellido, "dermatologo": email,
+                       "eliminado_en": p.eliminado_en, "motivo_eliminacion": p.motivo_eliminacion} for p, email in filas],
+            "total": total, "pagina": pagina, "tamano": tamano}
+
+
+@router.post("/pacientes/{paciente_id}/reactivar")
+def reactivar_paciente(paciente_id: int, datos: PacienteReactivar, request: Request, db: Session = Depends(get_db),
+                       admin: Usuario = Depends(solo_admin)):
+    if not datos.confirmar:
+        raise HTTPException(400, "Confirmá la reactivación del paciente para continuar.")
+    p = db.get(Paciente, paciente_id)
+    if not p:
+        raise HTTPException(404, "No encontramos a ese paciente.")
+    pacientes_router.reactivar(db, request, admin, p, datos.motivo)
+    return {"mensaje": f"El paciente {p.nombre} {p.apellido} volvió a la lista de su dermatólogo."}
 
 
 @router.post("/recordatorios/ejecutar")
@@ -229,7 +322,7 @@ def exportar_auditoria(
     resultado: Optional[str] = Query(None, pattern="^(exito|fallo)$"), desde: Optional[date] = None, hasta: Optional[date] = None,
     db: Session = Depends(get_db), _: Usuario = Depends(solo_admin),
 ):
-    filas = _consulta_auditoria(db, usuario, modulo, accion, resultado, desde, hasta).limit(20000).all()
+    filas = _consulta_auditoria(db, usuario, modulo, accion, resultado, desde, hasta).limit(getattr(settings, "MAX_FILAS_CSV", 20000)).all()
     return respuesta_csv(
         "Bitácora de auditoría", ["Fecha (UTC)", "Usuario", "IP", "Módulo", "Acción", "Entidad", "ID", "Resultado", "Detalle"],
         [(a.fecha, a.usuario_email or "", a.ip or "", a.modulo, a.accion, a.entidad or "", a.entidad_id or "", a.resultado, a.detalle or "") for a in filas],

@@ -111,6 +111,25 @@ class PacienteEliminar(BaseModel):
         return limpiar_texto(v, campo="motivo", max_len=300, obligatorio=True)
 
 
+class PacienteReactivar(BaseModel):
+    motivo: Optional[str] = Field(default=None, max_length=300)
+    confirmar: bool = False
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo(cls, v):
+        return limpiar_texto(v, campo="motivo", max_len=300)
+
+
+class RevocacionConsentimiento(BaseModel):
+    motivo: Optional[str] = Field(default=None, max_length=300)
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo(cls, v):
+        return limpiar_texto(v, campo="motivo", max_len=300)
+
+
 class PacienteRespuesta(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -127,3 +146,5 @@ class PacienteRespuesta(BaseModel):
     version: int = 1
     tiene_consentimiento: bool = False
     fecha_creacion: Optional[datetime] = None
+    eliminado_en: Optional[datetime] = None
+    motivo_eliminacion: Optional[str] = None

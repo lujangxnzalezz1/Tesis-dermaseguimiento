@@ -43,4 +43,5 @@ class ConsentimientoPaciente(Base):
     fecha = Column(DateTime, nullable=False, default=ahora)
     version_politica = Column(String, nullable=False)
     finalidad = Column(String, nullable=False)
-    revocado_en = Column(DateTime, nullable=True)
+    revocado_en = Column(DateTime, nullable=True, index=True)  # se filtra por «vigente» (revocado_en IS NULL)
+    motivo_revocacion = Column(String, nullable=True)
