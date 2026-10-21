@@ -4,7 +4,9 @@ import { Platform } from 'react-native';
 // Notificaciones push con OneSignal. El SDK es nativo: no existe en la versión web ni en Expo Go,
 // así que ahí todas estas funciones no hacen nada y la app sigue funcionando igual.
 // Para probarlas hace falta un development build (npx expo run:android / run:ios).
-const APP_ID: string | undefined = Constants.expoConfig?.extra?.oneSignalAppId;
+// El id de la app de OneSignal se define en EXPO_PUBLIC_ONESIGNAL_APP_ID (archivo .env de la app). Se
+// mantiene la lectura de app.json (extra.oneSignalAppId) para builds anteriores que todavía lo tengan.
+const APP_ID: string | undefined = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID || Constants.expoConfig?.extra?.oneSignalAppId;
 
 const disponible =
   Platform.OS !== 'web' && Constants.executionEnvironment !== ExecutionEnvironment.StoreClient && !!APP_ID;

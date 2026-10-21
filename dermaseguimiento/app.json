@@ -65,9 +65,6 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    },
-    "extra": {
-      "oneSignalAppId": "81e50563-7569-4288-9f56-eaeaf1a39441"
     }
   }
 }

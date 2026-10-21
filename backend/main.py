@@ -8,7 +8,7 @@ from core import errores
 from core.url_base import fijar_desde_solicitud
 from core.config import settings
 from routers import (
-    admin, admin_planes, auth, pacientes, pasarela_sandbox, privacidad, procesamiento, reportes, sus, suscripciones,
+    admin, admin_planes, admin_seguridad, auth, pacientes, pasarela_sandbox, privacidad, procesamiento, reportes, sus, suscripciones,
 )
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -42,7 +42,7 @@ async def cabeceras_de_seguridad(request: Request, call_next):
     return respuesta
 
 
-for r in (auth, privacidad, pacientes, procesamiento, reportes, suscripciones, admin, admin_planes, sus):
+for r in (auth, privacidad, pacientes, procesamiento, reportes, suscripciones, admin, admin_planes, admin_seguridad, sus):
     app.include_router(r.router)
 # Webhook y checkout de prueba: solo existen con PASARELA=sandbox
 pasarela_sandbox.incluir_en(app)

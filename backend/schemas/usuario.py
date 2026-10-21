@@ -18,7 +18,7 @@ class UsuarioRegistro(BaseModel):
     confirmar_password: str = Field(max_length=128)
     nombre: str
     acepta_politica: bool
-    captcha_token: Optional[str] = None
+    captcha_token: Optional[str] = Field(default=None, max_length=4096)
 
     @field_validator("nombre")
     @classmethod
@@ -59,6 +59,12 @@ class UsuarioRespuesta(BaseModel):
     email_verificado: bool = True
 
 
+class PerfilRespuesta(UsuarioRespuesta):
+    password_vencida: bool = False
+    politica_pendiente: bool = False
+    politica_version: Optional[str] = None
+
+
 class UsuarioAdminRespuesta(UsuarioRespuesta):
     fecha_creacion: Optional[datetime] = None
     fecha_modificacion: Optional[datetime] = None
@@ -72,18 +78,46 @@ class Token(BaseModel):
     access_token: str
     token_type: str
     password_vencida: bool = False
+    politica_pendiente: bool = False  # hay una versión nueva de la política que el usuario no aceptó
+    politica_version: Optional[str] = None
 
 
 class SolicitudReenvio(BaseModel):
     email: EmailStr
+    captcha_token: Optional[str] = Field(default=None, max_length=4096)
 
 
 class SolicitudRestablecer(BaseModel):
     email: EmailStr
+    captcha_token: Optional[str] = Field(default=None, max_length=4096)
+
+
+class AceptarPolitica(BaseModel):
+    version: str = Field(max_length=20)
+    acepta: bool
+
+    @model_validator(mode="after")
+    def _acepta(self):
+        if not self.acepta:
+            raise ValueError("Tenés que marcar la casilla para aceptar la Política de Privacidad.")
+        return self
+
+
+class EliminarCuenta(BaseModel):
+    """Retiro del consentimiento y baja de la cuenta por el propio titular."""
+    password: str = Field(max_length=128)
+    confirmar: bool = False
+    motivo: Optional[str] = Field(default=None, max_length=300)
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo(cls, v):
+        return limpiar_texto(v, campo="motivo", max_len=300)
 
 
 class Restablecer(BaseModel):
     token: str = Field(min_length=20, max_length=200)
+    captcha_token: Optional[str] = Field(default=None, max_length=4096)
     password: str = Field(max_length=128)
     confirmar_password: str = Field(max_length=128)
 

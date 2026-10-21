@@ -175,7 +175,7 @@ def test_recuperacion_completa_y_token_de_un_solo_uso(client, correos):
     login(client, password=nueva)
     assert client.post("/login", data={"username": "doc1@example.com", "password": PASSWORD}).status_code == 401
     assert client.get("/perfil", headers=h_vieja).status_code == 401  # sesiones anteriores cerradas
-    otra = "OtraClave#5555xx"  # el mismo enlace no se puede reutilizar
+    otra = "OtraClave#5858xx"  # el mismo enlace no se puede reutilizar
     assert client.post("/restablecer-contrasena", json={"token": token, "password": otra, "confirmar_password": otra}).status_code == 400
 
 

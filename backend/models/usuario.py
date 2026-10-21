@@ -35,9 +35,13 @@ class Usuario(Base):
     email_verificado = Column(Boolean, nullable=False, default=True, server_default="true")
     email_verificado_en = Column(DateTime, nullable=True)
 
-    # Consentimiento de la política de privacidad aceptada al registrarse
+    # Consentimiento de la política de privacidad (última versión aceptada; el historial está en
+    # consentimientos_usuario)
     politica_aceptada_version = Column(String, nullable=True)
     politica_aceptada_en = Column(DateTime, nullable=True)
+    politica_finalidad = Column(String, nullable=True)
+    consentimiento_revocado_en = Column(DateTime, nullable=True)
+    anonimizado_en = Column(DateTime, nullable=True)  # baja solicitada por el titular o fin del plazo de retención
 
 
 class Sesion(Base):
@@ -72,3 +76,18 @@ class TokenRestablecimiento(Base):
     expira_en = Column(DateTime, nullable=False)
     usado_en = Column(DateTime, nullable=True)
     tipo = Column(String, nullable=False, default=TOKEN_RESTABLECER, server_default=TOKEN_RESTABLECER, index=True)
+
+
+class ConsentimientoUsuario(Base):
+    """Evidencia del consentimiento del profesional: qué versión de la política aceptó, cuándo,
+    para qué finalidad y, si lo retiró, cuándo."""
+
+    __tablename__ = "consentimientos_usuario"
+
+    id = Column(Integer, primary_key=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False, index=True)
+    version_politica = Column(String, nullable=False)
+    finalidad = Column(String, nullable=False)
+    fecha = Column(DateTime, nullable=False, default=ahora)
+    ip = Column(String, nullable=True)
+    revocado_en = Column(DateTime, nullable=True)
