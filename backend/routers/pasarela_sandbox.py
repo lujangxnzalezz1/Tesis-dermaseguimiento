@@ -1,4 +1,9 @@
-"""Webhook de pagos (real) y página de checkout de la pasarela sandbox (solo desarrollo)."""
+"""Webhook firmado y página de checkout de la pasarela sandbox (solo desarrollo).
+
+Estas rutas existen ÚNICAMENTE con PASARELA=sandbox (ver `incluir_en`). Con AdamsPay el estado
+del pago se consulta al API del proveedor (`verificar_pago_externo`) y no se acepta ningún aviso
+firmado con el secreto local: de lo contrario, quien conociera PASARELA_WEBHOOK_SECRET podría
+aprobar un pago de AdamsPay sin que AdamsPay lo haya cobrado."""
 import json
 import logging
 import uuid
@@ -19,8 +24,16 @@ from services import pasarela
 from services.suscripcion_service import aplicar_pago_aprobado
 
 log = logging.getLogger("pagos")
-router = APIRouter(tags=["Pasarela de pago"])
+PROVEEDOR_SANDBOX = "sandbox"
 
+
+def _solo_sandbox():
+    """Defensa adicional: aunque el router quedara incluido, fuera del modo sandbox no responde."""
+    if settings.PASARELA != PROVEEDOR_SANDBOX:
+        raise HTTPException(404, "Not Found")
+
+
+router = APIRouter(tags=["Pasarela de pago"], dependencies=[Depends(_solo_sandbox)])
 ESTADOS_FINALES = {"aprobado": PAGO_APROBADO, "rechazado": PAGO_RECHAZADO, "cancelado": PAGO_CANCELADO}
 
 
@@ -44,6 +57,11 @@ async def webhook_pago(request: Request, db: Session = Depends(get_db)):
     if not pago:
         audit.registrar(db, request, None, "pagos", "webhook", resultado="fallo", detalle=f"referencia desconocida {referencia}")
         raise HTTPException(404, "Operación de pago desconocida.")
+    if pago.proveedor != PROVEEDOR_SANDBOX:
+        # Un pago de otra pasarela (AdamsPay, crédito) nunca se decide con un aviso local
+        audit.registrar(db, request, None, "pagos", "webhook", entidad="pago", entidad_id=pago.id, resultado="fallo",
+                        detalle=f"aviso sandbox rechazado para un pago de «{pago.proveedor}»")
+        raise HTTPException(409, "Esta operación no pertenece a la pasarela de pruebas.")
 
     if estado == "pendiente":
         return {"procesado": False, "motivo": "sin cambios (pendiente)"}
@@ -93,16 +111,14 @@ button{{width:100%;padding:14px;margin-top:10px;border:0;border-radius:8px;font-
 small{{color:#666}}</style></head><body><div class="c">{cuerpo}</div></body></html>""")
 
 
-if settings.PASARELA == "sandbox":
-
-    @router.get("/pasarela-sandbox/checkout/{referencia}", response_class=HTMLResponse, include_in_schema=False)
-    def checkout_sandbox(referencia: str, db: Session = Depends(get_db)):
-        pago = db.query(Pago).filter(Pago.referencia_externa == referencia).first()
-        if not pago or pago.proveedor != "sandbox":
-            return _pagina("Pago no encontrado", "<h2>Operación no encontrada</h2><p>El enlace de pago no es válido.</p>")
-        if pago.estado != PAGO_PENDIENTE:
-            return _pagina("Pago finalizado", f"<h2>Esta operación ya fue {escape(pago.estado)}</h2><p>Podés volver a la app.</p>")
-        return _pagina("Pasarela de pruebas", f"""
+@router.get("/pasarela-sandbox/checkout/{referencia}", response_class=HTMLResponse, include_in_schema=False)
+def checkout_sandbox(referencia: str, db: Session = Depends(get_db)):
+    pago = db.query(Pago).filter(Pago.referencia_externa == referencia).first()
+    if not pago or pago.proveedor != "sandbox":
+        return _pagina("Pago no encontrado", "<h2>Operación no encontrada</h2><p>El enlace de pago no es válido.</p>")
+    if pago.estado != PAGO_PENDIENTE:
+        return _pagina("Pago finalizado", f"<h2>Esta operación ya fue {escape(pago.estado)}</h2><p>Podés volver a la app.</p>")
+    return _pagina("Pasarela de pruebas", f"""
 <h2>Pasarela de pruebas (sandbox)</h2><p><b>{escape(formato_monto(pago.monto, pago.moneda))}</b><br><small>Ref. {escape(referencia)}</small></p>
 <small>Entorno de prueba: no se realiza ningún cobro real. El resultado se informa al sistema con un webhook firmado.</small>
 <form method="post" action="/pasarela-sandbox/decidir"><input type="hidden" name="referencia" value="{escape(referencia)}">
@@ -111,19 +127,28 @@ if settings.PASARELA == "sandbox":
 <button class="ca" name="decision" value="cancelado">Cancelar pago</button>
 <button class="pe" name="decision" value="pendiente">Dejar pendiente</button></form>""")
 
-    @router.post("/pasarela-sandbox/decidir", response_class=HTMLResponse, include_in_schema=False)
-    def decidir_sandbox(referencia: str = Form(...), decision: str = Form(...), db: Session = Depends(get_db)):
-        pago = db.query(Pago).filter(Pago.referencia_externa == referencia, Pago.proveedor == "sandbox").first()
-        if not pago or decision not in ("aprobado", "rechazado", "cancelado", "pendiente"):
-            return _pagina("Error", "<h2>Solicitud no válida</h2>")
-        evento = {
-            "evento_id": uuid.uuid4().hex, "referencia": referencia, "estado": decision, "monto": str(pago.monto),
-            "moneda": pago.moneda, "forma_pago": "Tarjeta de crédito (sandbox)",
-        }
-        codigo = pasarela.enviar_webhook(evento)
-        if codigo >= 400:
-            return _pagina("Error", "<h2>No pudimos avisar al comercio</h2><p>Intentá de nuevo en unos minutos.</p>")
-        textos = {"aprobado": "¡Pago aprobado!", "rechazado": "Pago rechazado", "cancelado": "Pago cancelado", "pendiente": "Pago pendiente"}
-        volver = settings.CORS_ORIGINS.split(",")[0].strip()
-        enlace = f'<p><a href="{escape(volver)}/suscripcion">Volver a la aplicación (versión web)</a></p>' if volver else ""
-        return _pagina("Resultado", f"<h2>{textos[decision]}</h2><p>Ya podés cerrar esta ventana y volver a la aplicación.</p>{enlace}")
+
+@router.post("/pasarela-sandbox/decidir", response_class=HTMLResponse, include_in_schema=False)
+def decidir_sandbox(referencia: str = Form(...), decision: str = Form(...), db: Session = Depends(get_db)):
+    pago = db.query(Pago).filter(Pago.referencia_externa == referencia, Pago.proveedor == "sandbox").first()
+    if not pago or decision not in ("aprobado", "rechazado", "cancelado", "pendiente"):
+        return _pagina("Error", "<h2>Solicitud no válida</h2>")
+    evento = {
+        "evento_id": uuid.uuid4().hex, "referencia": referencia, "estado": decision, "monto": str(pago.monto),
+        "moneda": pago.moneda, "forma_pago": "Tarjeta de crédito (sandbox)",
+    }
+    codigo = pasarela.enviar_webhook(evento)
+    if codigo >= 400:
+        return _pagina("Error", "<h2>No pudimos avisar al comercio</h2><p>Intentá de nuevo en unos minutos.</p>")
+    textos = {"aprobado": "¡Pago aprobado!", "rechazado": "Pago rechazado", "cancelado": "Pago cancelado", "pendiente": "Pago pendiente"}
+    volver = settings.CORS_ORIGINS.split(",")[0].strip()
+    enlace = f'<p><a href="{escape(volver)}/suscripcion">Volver a la aplicación (versión web)</a></p>' if volver else ""
+    return _pagina("Resultado", f"<h2>{textos[decision]}</h2><p>Ya podés cerrar esta ventana y volver a la aplicación.</p>{enlace}")
+
+
+def incluir_en(app) -> bool:
+    """Registra el webhook y el checkout de prueba solo si la pasarela configurada es la sandbox."""
+    if settings.PASARELA != PROVEEDOR_SANDBOX:
+        return False
+    app.include_router(router)
+    return True

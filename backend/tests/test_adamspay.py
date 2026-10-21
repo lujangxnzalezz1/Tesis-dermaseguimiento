@@ -34,7 +34,8 @@ def test_consulta_el_estado(monkeypatch):
     deuda = {"debt": {"payStatus": {"status": "paid"}, "amount": {"value": "149000.0000", "currency": "PYG"}}}
     monkeypatch.setattr(pas.urllib.request, "urlopen", lambda req, timeout: Resp(json.dumps(deuda).encode()))
     estado = pas.PasarelaAdamsPay().consultar("DS-1")
-    assert estado == {"pagado": True, "monto": Decimal("149000.0000"), "moneda": "PYG"}
+    assert estado == {"estado": "aprobado", "pagado": True, "monto": Decimal("149000.0000"), "moneda": "PYG",
+                      "transaccion_id": None, "forma_pago": None}
 
 
 def test_sin_conexion_lanza_error_controlado(monkeypatch):

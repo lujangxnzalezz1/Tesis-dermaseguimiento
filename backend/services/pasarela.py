@@ -21,6 +21,7 @@ from typing import Optional
 
 from core.config import settings
 from core.url_base import url_base
+from models.suscripcion import PAGO_APROBADO, PAGO_CANCELADO, PAGO_PENDIENTE, PAGO_VENCIDO
 
 
 class ErrorFirma(Exception):
@@ -58,6 +59,44 @@ class ErrorPasarela(Exception):
     pass
 
 
+# Estados de la deuda en AdamsPay («objStatus») que significan que ya no se puede pagar
+ADAMSPAY_CANCELADA = {"canceled", "cancelled", "voided", "void", "deleted", "annulled"}
+ADAMSPAY_VENCIDA = {"expired"}
+
+
+def _fecha_utc(valor) -> Optional[datetime]:
+    """Fecha ISO de AdamsPay (con o sin zona; sin zona se toma como UTC, igual que al crear la deuda)."""
+    if not valor:
+        return None
+    try:
+        fecha = datetime.fromisoformat(str(valor).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return fecha if fecha.tzinfo else fecha.replace(tzinfo=timezone.utc)
+
+
+def _primero(datos: dict, *claves):
+    for clave in claves:
+        if isinstance(datos, dict) and datos.get(clave):
+            return str(datos[clave])
+    return None
+
+
+def estado_de_deuda(d: dict) -> str:
+    """Traduce una deuda de AdamsPay a los estados del Pago: pagada → aprobado; cancelada/anulada →
+    cancelado; expirada o fuera del período de validez → vencido; cualquier otro caso → pendiente."""
+    pago = ((d.get("payStatus") or {}).get("status") or "").lower()
+    objeto = ((d.get("objStatus") or {}).get("status") or "").lower()
+    if pago == "paid":
+        return PAGO_APROBADO
+    if objeto in ADAMSPAY_CANCELADA:
+        return PAGO_CANCELADO
+    fin = _fecha_utc((d.get("validPeriod") or {}).get("end"))
+    if objeto in ADAMSPAY_VENCIDA or (fin is not None and fin <= datetime.now(timezone.utc)):
+        return PAGO_VENCIDO
+    return PAGO_PENDIENTE
+
+
 class PasarelaAdamsPay:
     """AdamsPay (Paraguay): cada pago es una «deuda» con una URL de pago propia.
     El estado se consulta al API con la apikey; no depende de un webhook público."""
@@ -70,7 +109,7 @@ class PasarelaAdamsPay:
             headers={"apikey": settings.ADAMSPAY_API_KEY, "Content-Type": "application/json"},
         )
         try:
-            with urllib.request.urlopen(req, timeout=15) as r:
+            with urllib.request.urlopen(req, timeout=settings.ADAMSPAY_TIMEOUT_SEGUNDOS) as r:
                 return json.loads(r.read().decode())
         except urllib.error.HTTPError as e:
             raise ErrorPasarela(f"AdamsPay respondió {e.code}: {e.read().decode()[:300]}")
@@ -80,7 +119,7 @@ class PasarelaAdamsPay:
     def crear_operacion(self, pago_monto, moneda: str, descripcion: str) -> tuple[str, str]:
         referencia = "DS-" + uuid.uuid4().hex[:20].upper()
         inicio = datetime.now(timezone.utc).replace(microsecond=0)
-        fin = inicio + timedelta(days=1)
+        fin = inicio + timedelta(hours=settings.ADAMSPAY_VIGENCIA_HORAS)
         deuda = {
             "docId": referencia, "label": descripcion,
             "amount": {"currency": moneda, "value": str(int(pago_monto))},
@@ -93,10 +132,21 @@ class PasarelaAdamsPay:
             raise ErrorPasarela(f"Respuesta inesperada de AdamsPay: {str(r)[:300]}")
 
     def consultar(self, referencia: str) -> dict:
-        """Devuelve {'pagado': bool, 'monto': Decimal, 'moneda': str} según el estado de la deuda."""
-        d = self._llamar("GET", f"/debts/{referencia}")["debt"]
-        return {"pagado": d["payStatus"]["status"] == "paid",
-                "monto": Decimal(str(d["amount"]["value"])), "moneda": d["amount"]["currency"]}
+        """Estado de la deuda: {'estado', 'pagado', 'monto', 'moneda', 'transaccion_id', 'forma_pago'}.
+        El id de transacción y el medio de pago solo vienen cuando AdamsPay los informa."""
+        r = self._llamar("GET", f"/debts/{referencia}")
+        try:
+            d = r["debt"]
+            estado = estado_de_deuda(d)
+            monto, moneda = Decimal(str(d["amount"]["value"])), d["amount"]["currency"]
+        except (KeyError, TypeError, ArithmeticError):
+            raise ErrorPasarela(f"Respuesta inesperada de AdamsPay: {str(r)[:300]}")
+        pago = d.get("payStatus") or {}
+        return {
+            "estado": estado, "pagado": estado == PAGO_APROBADO, "monto": monto, "moneda": moneda,
+            "transaccion_id": _primero(pago, "txId", "transactionId", "id") or _primero(d, "txId", "transactionId"),
+            "forma_pago": _primero(pago, "payMethod", "method", "channel") or _primero(d, "payMethod", "paymentMethod"),
+        }
 
 
 def obtener_pasarela():
