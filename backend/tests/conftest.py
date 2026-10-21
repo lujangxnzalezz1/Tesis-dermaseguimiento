@@ -3,8 +3,9 @@ import tempfile
 
 # Configuración de PRUEBA: debe fijarse antes de importar la aplicación.
 _TMP = tempfile.mkdtemp(prefix="derma_tests_")
+# La base se puede cambiar desde afuera (CI con PostgreSQL); por defecto, SQLite en memoria.
+os.environ.setdefault("DATABASE_URL", "sqlite://")
 os.environ.update({
-    "DATABASE_URL": "sqlite://",
     "SECRET_KEY": "clave-solo-para-pruebas-automaticas-1234567890",
     "PASARELA_WEBHOOK_SECRET": "secreto-pasarela-de-pruebas",
     "RUTA_ALMACENAMIENTO": os.path.join(_TMP, "almacenamiento"),
