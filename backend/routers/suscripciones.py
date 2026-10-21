@@ -1,9 +1,11 @@
 import json
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
+from jose import JWTError, jwt
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
@@ -11,9 +13,12 @@ from core.config import settings
 from core.database import get_db
 from core.security import obtener_usuario_actual
 from core.tiempo import ahora
+from core.url_base import url_base
 from models.suscripcion import (
     Comprobante, HistorialSuscripcion, Notificacion, Pago, Plan, Suscripcion,
 )
+
+ESTADOS_PAGO_FILTRO = "^(pendiente|aprobado|rechazado|cancelado|vencido)$"
 from models.usuario import Usuario
 from schemas.comunes import limpiar_texto
 from services import auditoria_service as audit
@@ -64,17 +69,46 @@ def mi_suscripcion(db: Session = Depends(get_db), usuario: Usuario = Depends(obt
 def historial_suscripcion(db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual)):
     susc = svc.asegurar_suscripcion(db, usuario)
     filas = db.query(HistorialSuscripcion).filter(HistorialSuscripcion.suscripcion_id == susc.id).order_by(HistorialSuscripcion.id.desc()).all()
-    return [{"fecha": h.fecha, "evento": h.evento, "plan_anterior_id": h.plan_anterior_id, "plan_nuevo_id": h.plan_nuevo_id, "detalle": h.detalle} for h in filas]
+    nombres = {p.id: p.nombre for p in db.query(Plan).all()}
+    return [{"fecha": h.fecha, "evento": h.evento, "plan_anterior_id": h.plan_anterior_id, "plan_nuevo_id": h.plan_nuevo_id,
+             "plan_anterior": nombres.get(h.plan_anterior_id), "plan_nuevo": nombres.get(h.plan_nuevo_id), "detalle": h.detalle}
+            for h in filas]
 
 
 class SolicitudCheckout(BaseModel):
     plan_codigo: str = Field(min_length=2, max_length=50)
+    # Opcionales, solo para el recibo (el perfil del usuario no guarda RUC ni teléfono)
+    documento: Optional[str] = Field(None, max_length=20)
+    telefono: Optional[str] = Field(None, max_length=25)
+
+    @field_validator("documento")
+    @classmethod
+    def _documento(cls, v):
+        v = limpiar_texto(v, campo="RUC o CI", max_len=20)
+        if v and not re.fullmatch(r"[0-9]{3,12}(-[0-9])?", v.replace(".", "")):
+            raise ValueError("El RUC o CI solo puede tener números y, si es RUC, el dígito verificador (por ejemplo 1234567-8).")
+        return v.replace(".", "") if v else None
+
+    @field_validator("telefono")
+    @classmethod
+    def _telefono(cls, v):
+        v = limpiar_texto(v, campo="teléfono", max_len=25)
+        if v and not re.fullmatch(r"\+?[0-9 ()-]{6,24}", v):
+            raise ValueError("El teléfono solo puede tener números, espacios, guiones y el signo + al inicio.")
+        return v
+
+
+@router.get("/suscripcion/cotizacion")
+def cotizar(plan_codigo: str = Query(min_length=2, max_length=50), db: Session = Depends(get_db),
+            usuario: Usuario = Depends(obtener_usuario_actual)):
+    """Importe a pagar y crédito proporcional ANTES de ir a la pasarela (no crea ningún pago)."""
+    return svc.cotizar(db, usuario, plan_codigo)
 
 
 @router.post("/suscripcion/checkout")
 def iniciar_checkout(datos: SolicitudCheckout, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual)):
     """Contratar, renovar o cambiar de plan. Si corresponde pagar, devuelve la URL de la pasarela."""
-    resultado = svc.iniciar_cambio_o_pago(db, usuario, datos.plan_codigo)
+    resultado = svc.iniciar_cambio_o_pago(db, usuario, datos.plan_codigo, datos.documento, datos.telefono)
     audit.registrar(db, request, usuario, "suscripciones", "checkout", entidad="plan", entidad_id=datos.plan_codigo,
                     despues={k: v for k, v in resultado.items() if k != "url_pago"})
     return resultado
@@ -107,8 +141,8 @@ def estado_pago(pago_id: int, db: Session = Depends(get_db), usuario: Usuario = 
     pago = db.query(Pago).filter(Pago.id == pago_id, Pago.usuario_id == usuario.id).first()
     if not pago:
         raise HTTPException(404, "No encontramos ese pago.")
-    pago = svc.verificar_pago_externo(db, pago)
-    comp = db.query(Comprobante).filter(Comprobante.pago_id == pago.id).first()
+    pago = svc.verificar_pago_externo(db, pago)  # 503 controlado si la pasarela no responde
+    comp = svc.comprobante_vigente(db, pago.id)
     return {"id": pago.id, "estado": pago.estado, "monto": str(pago.monto), "moneda": pago.moneda,
             "referencia": pago.referencia_externa, "comprobante_id": comp.id if comp else None}
 
@@ -125,7 +159,7 @@ def _consulta_pagos(db, usuario, estado, desde, hasta):
 
 
 def _pago_a_dict(db, p: Pago) -> dict:
-    comp = db.query(Comprobante).filter(Comprobante.pago_id == p.id).first()
+    comp = svc.comprobante_vigente(db, p.id)
     plan = db.get(Plan, p.plan_id)
     return {"id": p.id, "fecha": p.creado_en, "plan": plan.nombre if plan else "", "tipo": p.tipo, "monto": str(p.monto),
             "moneda": p.moneda, "estado": p.estado, "referencia": p.referencia_externa,
@@ -134,7 +168,7 @@ def _pago_a_dict(db, p: Pago) -> dict:
 
 @router.get("/pagos")
 def mis_pagos(
-    estado: Optional[str] = Query(None, pattern="^(pendiente|aprobado|rechazado|cancelado)$"),
+    estado: Optional[str] = Query(None, pattern=ESTADOS_PAGO_FILTRO),
     desde: Optional[date] = None, hasta: Optional[date] = None,
     pagina: int = Query(1, ge=1), tamano: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual),
@@ -147,7 +181,7 @@ def mis_pagos(
 
 @router.get("/pagos.csv")
 def exportar_pagos(
-    request: Request, estado: Optional[str] = Query(None, pattern="^(pendiente|aprobado|rechazado|cancelado)$"),
+    request: Request, estado: Optional[str] = Query(None, pattern=ESTADOS_PAGO_FILTRO),
     desde: Optional[date] = None, hasta: Optional[date] = None, decimal: str = Query("coma", pattern="^(coma|punto)$"),
     db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual),
 ):
@@ -167,10 +201,14 @@ def exportar_pagos(
 def _comp_dict(c: Comprobante) -> dict:
     return {
         "id": c.id, "numero": c.numero, "fecha_emision": c.fecha_emision, "estado": c.estado, "emisor": c.emisor_nombre,
-        "emisor_ruc": c.emisor_ruc, "pagador": c.pagador_nombre, "pagador_email": c.pagador_email, "concepto": c.concepto,
+        "emisor_ruc": c.emisor_ruc, "pagador": c.pagador_nombre, "pagador_email": c.pagador_email,
+        "pagador_documento": c.pagador_documento, "pagador_telefono": c.pagador_telefono, "concepto": c.concepto,
         "referencia": c.referencia, "periodo": c.periodo, "monto": str(c.monto), "moneda": c.moneda,
+        "subtotal": str(c.subtotal) if c.subtotal is not None else None, "credito": str(c.credito) if c.credito is not None else None,
+        "iva": str(c.iva) if c.iva is not None else None,
         "monto_letras": c.monto_letras, "forma_pago": c.forma_pago, "leyenda": c.leyenda,
         "anulado_en": c.anulado_en, "motivo_anulacion": c.motivo_anulacion,
+        "reimpresiones": c.reimpresiones, "reimpreso_en": c.reimpreso_en,
     }
 
 
@@ -198,15 +236,43 @@ def ver_comprobante(comp_id: int, db: Session = Depends(get_db), usuario: Usuari
 
 @router.get("/comprobantes/{comp_id}/pdf")
 def descargar_comprobante(comp_id: int, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual)):
-    c = _comprobante_propio(db, usuario, comp_id)
-    c.reimpresiones += 1
-    reimpreso = c.reimpresiones > 1
-    if reimpreso and c.estado == "emitido":
-        c.estado = "reimpreso"
-    db.commit()
+    return _entregar_pdf(db, request, usuario, _comprobante_propio(db, usuario, comp_id))
+
+
+def _entregar_pdf(db: Session, request: Request, usuario: Usuario, c: Comprobante, adjunto: bool = True) -> Response:
+    reimpreso = svc.registrar_impresion(db, c)  # el estado sigue «emitido»: solo se cuentan las reimpresiones
     audit.registrar(db, request, usuario, "comprobantes", "reimprimir" if reimpreso else "imprimir", entidad="comprobante", entidad_id=c.id)
+    disposicion = "attachment" if adjunto else "inline"
     return Response(generar_pdf(c, reimpreso), media_type="application/pdf",
-                    headers={"Content-Disposition": f'attachment; filename="{c.numero}.pdf"'})
+                    headers={"Content-Disposition": f'{disposicion}; filename="{c.numero}.pdf"'})
+
+
+USO_ENLACE_PDF = "comprobante_pdf"
+
+
+@router.post("/comprobantes/{comp_id}/enlace")
+def enlace_comprobante(comp_id: int, db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual)):
+    """App nativa: el navegador del sistema no puede enviar el token de sesión, así que se entrega un
+    enlace firmado que vale solo para ESTE comprobante y por pocos minutos."""
+    c = _comprobante_propio(db, usuario, comp_id)
+    expira = ahora() + timedelta(minutes=settings.COMPROBANTE_ENLACE_MINUTOS)
+    token = jwt.encode({"sub": str(usuario.id), "comp": c.id, "uso": USO_ENLACE_PDF, "exp": expira},
+                       settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+    return {"url": f"{url_base()}/comprobantes/descarga/{token}", "expira_en": expira}
+
+
+@router.get("/comprobantes/descarga/{token}")
+def descargar_con_enlace(token: str, request: Request, db: Session = Depends(get_db)):
+    try:
+        datos = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        raise HTTPException(401, "El enlace de descarga no es válido o venció. Volvé a pedirlo desde la app.")
+    if datos.get("uso") != USO_ENLACE_PDF:
+        raise HTTPException(401, "El enlace de descarga no es válido o venció. Volvé a pedirlo desde la app.")
+    usuario = db.get(Usuario, int(datos.get("sub") or 0))
+    if usuario is None or not usuario.activo:
+        raise HTTPException(401, "El enlace de descarga no es válido o venció. Volvé a pedirlo desde la app.")
+    return _entregar_pdf(db, request, usuario, _comprobante_propio(db, usuario, int(datos.get("comp") or 0)), adjunto=False)
 
 
 @router.get("/notificaciones")
