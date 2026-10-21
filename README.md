@@ -28,15 +28,19 @@ cuidado dermatológico en consultorios independientes de Asunción, 2026*.
 - [Instalación](#instalación)
 - [Configuración segura](#configuración-segura)
 - [Integraciones externas](#integraciones-externas)
+- [Modelo de detección de lesiones](#modelo-de-detección-de-lesiones)
+- [Despliegue en producción](#despliegue-en-producción)
+- [Respaldo y restauración](#respaldo-y-restauración)
 - [Pruebas y verificación](#pruebas-y-verificación)
+- [Prueba de carga](#prueba-de-carga)
 - [Resultados de la validación técnica](#resultados-de-la-validación-técnica)
 - [Estado del desarrollo](#estado-del-desarrollo)
 - [Autora](#autora)
 
 ## Funcionalidades
 
-- **Gestión clínica:** registro de pacientes con consentimiento informado digital, historial cronológico y
-  baja de pacientes con motivo.
+- **Gestión clínica:** registro y edición de pacientes con consentimiento informado digital (revocable),
+  historial cronológico, baja lógica con motivo y reactivación, y control de ediciones simultáneas.
 - **Captura guiada:** óvalo y silueta de la consulta anterior en pantalla; control de luz, enfoque y encuadre
   antes de procesar.
 - **Procesamiento de imágenes:** detección de 478 puntos faciales (MediaPipe), alineación afín (OpenCV),
@@ -49,7 +53,8 @@ cuidado dermatológico en consultorios independientes de Asunción, 2026*.
   vencimiento.
 - **Seguridad:** contraseñas con bcrypt, verificación de correo, sesiones revocables, bloqueo por intentos
   fallidos, control de acceso por rol y por propiedad de los datos y auditoría inmutable.
-- **Administración:** usuarios y roles, auditoría, configuración de correo y resultados de la escala SUS.
+- **Administración:** usuarios y roles, suscripciones, anulación de comprobantes, recuperación de pacientes
+  dados de baja, auditoría con filtros, configuración y plantillas de correo y resultados de la escala SUS.
 
 ## Identidad de la aplicación
 
@@ -78,7 +83,7 @@ El procesamiento de imágenes se ejecuta en el servidor; ninguna imagen se enví
 | Componente | Tecnología | Versión |
 |---|---|---|
 | Backend | Python, FastAPI, SQLAlchemy, Alembic, Pydantic | 3.12 · 0.141 · 2.0 · 1.20 · 2.13 |
-| Base de datos | PostgreSQL | 16 o superior |
+| Base de datos | PostgreSQL | 16 |
 | Visión artificial | OpenCV, MediaPipe Face Landmarker, scikit-image | 5.0 · 1.0 · 0.26 |
 | Detección de lesiones | YOLOv8n exportado a ONNX, entrenado con ACNE04 | 8.x |
 | Aplicación | React Native, Expo, expo-router | 0.81 · SDK 54 · 6 |
@@ -98,9 +103,11 @@ Tesis-dermaseguimiento/
 │   ├── routers/              endpoints por módulo
 │   ├── services/             lógica de negocio, visión artificial, pagos, correo y push
 │   ├── migrations/           migraciones de Alembic (esquema versionado)
-│   ├── scripts/              datos iniciales, validación, prueba piloto y mediciones
+│   ├── scripts/              datos iniciales, respaldo y restauración, validación, piloto y mediciones
+│   ├── pruebas_carga/        prueba de carga con Locust
 │   └── tests/                pruebas automáticas (pytest)
 ├── dermaseguimiento/         aplicación React Native + Expo Router
+├── entrenamiento_yolo/       preparación de ACNE04, evaluación y exportación del modelo a ONNX
 ├── .github/workflows/        integración continua
 └── docker-compose.yml        base de datos y API en contenedores
 ```
@@ -112,7 +119,7 @@ Tesis-dermaseguimiento/
 | Herramienta | Versión |
 |---|---|
 | Python | 3.12 |
-| PostgreSQL | 16 o superior |
+| PostgreSQL | 16 |
 | Node.js y npm | 20 o superior |
 | Android Studio (opcional, app nativa) | con Java 17 |
 
@@ -133,7 +140,8 @@ uvicorn main:app --reload
 - Documentación interactiva: http://127.0.0.1:8000/docs (Swagger) y http://127.0.0.1:8000/redoc
 - Chequeo de disponibilidad: http://127.0.0.1:8000/salud
 
-El modelo de lesiones se copia en `backend/modelos/acne_yolov8n.onnx`. Es opcional: sin él, el sistema
+El modelo de lesiones se copia en `backend/modelos/acne_yolov8n.onnx` (ver
+[Modelo de detección de lesiones](#modelo-de-detección-de-lesiones)). Es opcional: sin él, el sistema
 funciona y omite ese análisis.
 
 ### 2. Aplicación (navegador)
@@ -162,6 +170,9 @@ cp backend/.env.example backend/.env
 POSTGRES_PASSWORD=una-clave-fuerte docker compose up --build
 ```
 
+Levanta tres servicios: `db` (PostgreSQL 16), `backend` (aplica las migraciones, carga los datos iniciales y
+arranca la API en el puerto 8000) y `recordatorios` (genera los avisos de vencimiento una vez por día).
+
 ## Configuración segura
 
 El repositorio no contiene credenciales. Toda la configuración se define con variables de entorno en
@@ -188,26 +199,183 @@ Para generar claves: `python -c "import secrets; print(secrets.token_urlsafe(48)
   resultado consultando el estado con la clave de la aplicación. Un pago se aprueba solo si el monto y la
   moneda coinciden con la operación. En el ambiente de pruebas se usa el simulador de AdamsPay.
 - **Correo SMTP:** verificación de cuenta, recuperación de contraseña y avisos de pago y vencimiento. Sin
-  SMTP configurado, los enlaces se muestran en la consola del servidor.
+  SMTP configurado, los enlaces se muestran en la consola del servidor. Los textos de los correos se editan
+  desde *Administración → Correo*.
 - **OneSignal:** notificaciones push en la aplicación instalada. Funciona en compilaciones nativas (no en la
   versión web ni en Expo Go) y requiere configurar Firebase (Android) o APNs (iOS) en OneSignal.
 
-Avisos de vencimiento diarios con cron:
+### Configurar AdamsPay
+
+1. Crear una cuenta de comercio en AdamsPay y, en su panel, una **aplicación** en el ambiente de pruebas
+   (*staging*). Copiar su **apikey**.
+2. En `backend/.env`: `PASARELA=adamspay`, `ADAMSPAY_API_URL=https://staging.adamspay.com/api/v1` y
+   `ADAMSPAY_API_KEY=<apikey>`. `BASE_URL` debe ser la dirección pública de la API (a ella vuelve el
+   usuario después de pagar).
+3. Probar un cobro con el simulador de AdamsPay. Para producción, crear la aplicación en el ambiente real y
+   cambiar `ADAMSPAY_API_URL` por la dirección del API de producción que indica AdamsPay
+   (`https://checkout.adamspay.com/api/v1`) junto con la apikey de producción.
+
+Sin AdamsPay (desarrollo y pruebas automáticas) se usa `PASARELA=sandbox`, una pasarela interna que firma sus
+notificaciones con `PASARELA_WEBHOOK_SECRET`.
+
+### Configurar OneSignal (push)
+
+1. Crear una app en [onesignal.com](https://onesignal.com) y copiar el **App ID** y la **REST API Key**
+   (*Settings → Keys & IDs*).
+2. **Android:** crear un proyecto en Firebase, agregar la app `py.dermaseguimiento.app`, generar la clave de la
+   cuenta de servicio (*Configuración del proyecto → Cuentas de servicio → Generar nueva clave privada*) y
+   subir ese JSON en OneSignal (*Settings → Push & In-App → Google Android (FCM)*).
+3. **iOS:** en Apple Developer crear una clave APNs (`.p8`) y cargarla en OneSignal (*Apple iOS (APNs)*) con
+   el Key ID, el Team ID y el bundle `py.dermaseguimiento.app`.
+4. En la app, el App ID va en `app.json` (`expo.extra.oneSignalAppId`); en el backend, `ONESIGNAL_APP_ID` y
+   `ONESIGNAL_REST_API_KEY` en `backend/.env`.
+5. Generar una compilación nativa (`npx expo run:android` o con EAS). En producción, cambiar el `mode` del
+   plugin `onesignal-expo-plugin` de `development` a `production` en `app.json`.
+
+### Avisos de vencimiento diarios
+
+Con Docker Compose los genera el servicio `recordatorios`. En una instalación sin contenedores, con cron:
 
 ```bash
 0 9 * * *  cd /ruta/backend && ./venv/bin/python -m scripts.enviar_recordatorios
 ```
 
+## Modelo de detección de lesiones
+
+El archivo `backend/modelos/acne_yolov8n.onnx` **no se versiona** (`*.onnx` está en `.gitignore`) por su
+tamaño y porque el conjunto ACNE04 es de uso académico. Para obtenerlo:
+
+- **Copiarlo** del respaldo del proyecto a `backend/modelos/` (o a la ruta definida en `RUTA_MODELO_ACNE`).
+- **Regenerarlo** con los scripts de `entrenamiento_yolo/` (requieren `ultralytics` y `pyarrow`, fuera de
+  `requirements.txt`):
+
+  ```bash
+  cd entrenamiento_yolo
+  # 1. Descargar ACNE04 (Hugging Face, formato parquet) en datos/acne04_hf/data/
+  python preparar_datos.py                 # convierte a formato YOLO (train / val / test)
+  # 2. Entrenar (parámetros de la tesis: YOLOv8n preentrenado, 1024 px, hasta 100 épocas, paciencia 25)
+  yolo detect train model=yolov8n.pt data=datos/acne04_yolo/data.yaml imgsz=1024 epochs=100 patience=25 \
+       project=runs/detect name=runs/acne_yolov8n
+  python evaluar_y_exportar.py             # métricas en el conjunto de prueba y exportación a ONNX
+  ```
+
+  `evaluar_y_exportar.py` toma la última corrida, guarda las métricas en `resultados_prueba.md` y copia el
+  `.onnx` al backend (revisar las rutas `CORRIDA` y `DESTINO` al inicio del script).
+
+Sin el modelo, el backend registra un aviso al iniciar y omite el análisis de lesiones.
+
+## Despliegue en producción
+
+Esquema recomendado: un servidor Linux con Docker Compose (base, API y recordatorios) detrás de NGINX, que
+termina HTTPS con un certificado de Let's Encrypt. La API no se expone directamente a internet.
+
+1. **Variables de entorno** (`backend/.env`), además de las de [Configuración segura](#configuración-segura):
+
+   | Variable | Valor en producción |
+   |---|---|
+   | `SECRET_KEY` | clave aleatoria de 48 caracteres o más |
+   | `BASE_URL` | `https://api.tu-dominio.com.py` |
+   | `CORS_ORIGINS` | dominios desde los que se usa la app web |
+   | `PASARELA`, `ADAMSPAY_API_URL`, `ADAMSPAY_API_KEY` | ambiente real de AdamsPay |
+   | `SMTP_*`, `VERIFICAR_EMAIL_REGISTRO=true` | servidor de correo y verificación obligatoria |
+   | `RATE_LIMIT_ENABLED=true`, `ENFORCE_SUBSCRIPTION=true` | protecciones activas |
+   | `ONESIGNAL_APP_ID`, `ONESIGNAL_REST_API_KEY` | notificaciones push |
+
+   `POSTGRES_PASSWORD` se define en el entorno del servidor (no en el repositorio).
+
+2. **Contenedores:** `POSTGRES_PASSWORD=... docker compose up -d --build`. En `docker-compose.yml`, publicar
+   el puerto solo en la interfaz local (`"127.0.0.1:8000:8000"`) para que únicamente NGINX llegue a la API.
+
+3. **NGINX** (`/etc/nginx/sites-available/dermaseguimiento`):
+
+   ```nginx
+   server {
+       listen 80;
+       server_name api.tu-dominio.com.py;
+       client_max_body_size 25m;            # dos fotos de hasta 10 MB por consulta
+       location / {
+           proxy_pass http://127.0.0.1:8000;
+           proxy_set_header Host $host;
+           proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+           proxy_set_header X-Forwarded-Proto $scheme;
+           proxy_read_timeout 60s;           # el procesamiento de imágenes tarda unos segundos
+       }
+   }
+   ```
+
+4. **HTTPS con Let's Encrypt:**
+
+   ```bash
+   sudo apt install nginx certbot python3-certbot-nginx
+   sudo ln -s /etc/nginx/sites-available/dermaseguimiento /etc/nginx/sites-enabled/
+   sudo certbot --nginx -d api.tu-dominio.com.py --redirect   # obtiene el certificado y redirige HTTP a HTTPS
+   sudo certbot renew --dry-run                                # la renovación automática queda en un timer de systemd
+   ```
+
+5. **Tareas programadas** (`crontab -e` del usuario que administra el servidor): los avisos de vencimiento los
+   genera el servicio `recordatorios`; el respaldo diario se describe en la sección siguiente.
+
+6. **Aplicación:** compilar con `EXPO_PUBLIC_API_URL=https://api.tu-dominio.com.py` (web: `npx expo export
+   --platform web` y publicar la carpeta `dist/`; Android e iOS: EAS Build).
+
+## Respaldo y restauración
+
+`scripts/respaldo.py` guarda la base (pg_dump en formato personalizado) y el directorio de imágenes en una
+carpeta `respaldo_AAAAMMDD_HHMMSS/`, con un manifiesto de tamaños y SHA-256, y borra los respaldos con más de
+N días. `scripts/restaurar.py` verifica el manifiesto, restaura la base con `pg_restore` en una sola
+transacción, reemplaza las imágenes y muestra cuánto tardó cada paso (tiempo de recuperación). Ambos aceptan
+`--dry-run` para ver lo que harían sin tocar nada. Requieren `pg_dump`/`pg_restore` de la versión 16.
+
+```bash
+cd backend
+python -m scripts.respaldo --destino /srv/respaldos --dias 14 --dry-run   # simulación
+python -m scripts.respaldo --destino /srv/respaldos --dias 14             # respaldo real
+python -m scripts.restaurar /srv/respaldos/respaldo_20261021_020000 --dry-run
+python -m scripts.restaurar /srv/respaldos/respaldo_20261021_020000 --si  # sobrescribe base e imágenes
+```
+
+Respaldo diario a las 2:00 con cron:
+
+```bash
+0 2 * * *  cd /ruta/backend && ./venv/bin/python -m scripts.respaldo --destino /srv/respaldos --dias 14 >> /var/log/derma_respaldo.log 2>&1
+```
+
+Con Docker Compose, la base también se puede copiar desde su contenedor:
+`docker compose exec -T db pg_dump -Fc -U derma dermaseguimiento > base.dump`, y las imágenes desde el
+volumen `imagenes`. Los respaldos contienen datos de salud: deben guardarse cifrados y fuera del servidor.
+Conviene ensayar la restauración periódicamente sobre una base vacía y registrar el tiempo que informa el
+script.
+
 ## Pruebas y verificación
 
 ```bash
 cd backend
-pytest                                                     # 217 pruebas automáticas
+pytest                                                     # 297 pruebas automáticas (SQLite en memoria)
+DATABASE_URL=postgresql+psycopg2://usuario@localhost/derma_pruebas pytest   # las mismas sobre PostgreSQL
 python -m scripts.validar_alineacion --semisinteticos 50   # validación de la alineación
 python -m scripts.medir_rnf foto1.jpg foto2.jpg 10         # tiempo de procesamiento (RNF-06)
 ```
 
-GitHub Actions ejecuta las pruebas del backend en cada cambio del repositorio.
+GitHub Actions ejecuta las pruebas del backend en cada cambio del repositorio, dos veces: con SQLite y contra
+un contenedor de PostgreSQL 16. Las pruebas borran y recrean las tablas: usar siempre una base exclusiva
+para ellas.
+
+## Prueba de carga
+
+`backend/pruebas_carga/locustfile.py` simula dermatólogos que inician sesión y consultan su lista de
+pacientes, buscan y ven los planes. **Meta: 50 usuarios concurrentes con percentil 95 menor a 1 s y sin
+errores** (el procesamiento de imágenes se mide aparte con `scripts/medir_rnf.py`).
+
+```bash
+cd backend
+pip install locust==2.32.4
+python -m pruebas_carga.preparar_usuarios --cantidad 50          # SOLO en una base de prueba
+RATE_LIMIT_ENABLED=false uvicorn main:app --workers 4            # en otra terminal
+locust -f pruebas_carga/locustfile.py --host http://127.0.0.1:8000 \
+       --headless -u 50 -r 5 -t 5m --html pruebas_carga/reporte.html
+```
+
+Al terminar muestra solicitudes, porcentaje de errores y p95, y devuelve código 1 si no se cumple la meta.
 
 ## Resultados de la validación técnica
 
@@ -232,7 +400,7 @@ Los datos por par están en `backend/resultados_validacion/validacion_alineacion
 | 5 | Aplicación React Native / Expo | ✅ Completado |
 | 6 | Pagos con AdamsPay (ambiente de pruebas) | ✅ Completado |
 | 7 | Prueba piloto con dermatólogos (escala SUS) | 🔄 Preparada (`scripts/preparar_piloto.py`) |
-| 8 | Despliegue en servidor y pagos en producción | ⏳ Pendiente |
+| 8 | Despliegue en servidor y pagos en producción | ⏳ Pendiente (procedimiento documentado) |
 
 ## Autora
 

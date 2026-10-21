@@ -13,6 +13,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U derma -d dermaseguimiento"]
       interval: 5s
       retries: 10
+    restart: unless-stopped
   backend:
     build: ./backend
     env_file: ./backend/.env
@@ -26,6 +27,19 @@ services:
       - "8000:8000"
     volumes:
       - imagenes:/data/almacenamiento
+    restart: unless-stopped
+  # Avisos de vencimiento una vez por día (equivale al cron de scripts/enviar_recordatorios.py).
+  # Espera un minuto al arrancar para que el backend termine de aplicar las migraciones.
+  recordatorios:
+    build: ./backend
+    env_file: ./backend/.env
+    environment:
+      DATABASE_URL: postgresql://derma:${POSTGRES_PASSWORD}@db:5432/dermaseguimiento
+      RUTA_ALMACENAMIENTO: /data/almacenamiento
+    depends_on:
+      - backend
+    command: ["sh", "-c", "sleep 60; while true; do python -m scripts.enviar_recordatorios; sleep 86400; done"]
+    restart: unless-stopped
 volumes:
   pgdata:
   imagenes:
