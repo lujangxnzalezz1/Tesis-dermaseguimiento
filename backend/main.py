@@ -44,6 +44,8 @@ async def cabeceras_de_seguridad(request: Request, call_next):
 
 for r in (auth, privacidad, pacientes, procesamiento, reportes, suscripciones, pasarela_sandbox, admin, sus):
     app.include_router(r.router)
+from routers import admin_seguridad  # noqa: E402  (seguridad: política de contraseñas editable)
+app.include_router(admin_seguridad.router)
 
 
 @app.get("/")

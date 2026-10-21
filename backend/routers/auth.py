@@ -4,25 +4,29 @@ from datetime import timedelta
 
 from html import escape
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
+from core import captcha
 from core.captcha import verificar_captcha
 from core.config import settings
 from core.database import get_db
-from core.politica_password import descripcion_politica
+from core.politica_password import descripcion_politica, errores_password, politica_vigente
+from core.ratelimit import anotar_intento
 from core.ratelimit import dependencia as limite
 from core.url_base import url_base
 from core.security import (
-    crear_sesion, hash_password, obtener_sesion_actual, obtener_usuario_actual, revocar_sesiones_de_usuario,
-    verify_password,
+    crear_sesion, hash_password, ip_cliente, obtener_sesion_actual, obtener_usuario_actual, password_vencida,
+    politica_pendiente, revocar_sesiones_de_usuario, verify_password,
 )
 from core.tiempo import ahora
-from models.usuario import ROL_DERMATOLOGO, TOKEN_RESTABLECER, TOKEN_VERIFICAR, Sesion, TokenRestablecimiento, Usuario
+from models.usuario import (
+    ROL_DERMATOLOGO, TOKEN_RESTABLECER, TOKEN_VERIFICAR, ConsentimientoUsuario, Sesion, TokenRestablecimiento, Usuario,
+)
 from schemas.usuario import (
-    CambiarPassword, Restablecer, SolicitudReenvio, SolicitudRestablecer, Token, UsuarioRegistro, UsuarioRespuesta,
+    CambiarPassword, PerfilRespuesta, Restablecer, SolicitudReenvio, SolicitudRestablecer, Token, UsuarioRegistro,
+    UsuarioRespuesta,
 )
 from services import auditoria_service as audit
 from services import email_service
@@ -66,22 +70,40 @@ def _pagina(titulo: str, mensaje: str) -> HTMLResponse:
 
 
 @router.get("/politica-contrasenas")
-def politica_contrasenas():
-    """Texto de la política vigente (la app lo muestra en el formulario)."""
+def politica_contrasenas(db: Session = Depends(get_db)):
+    """Política vigente (la que guardó el administrador o, si no, la del entorno). La app la muestra en el formulario."""
+    pol = politica_vigente(db)
     return {
-        "descripcion": descripcion_politica(),
-        "longitud_minima": settings.PASSWORD_MIN_LENGTH,
-        "requiere_mayuscula": settings.PASSWORD_REQUIRE_UPPER,
-        "requiere_minuscula": settings.PASSWORD_REQUIRE_LOWER,
-        "requiere_numero": settings.PASSWORD_REQUIRE_DIGIT,
-        "requiere_especial": settings.PASSWORD_REQUIRE_SPECIAL,
+        "descripcion": descripcion_politica(pol),
+        "longitud_minima": pol["longitud_minima"],
+        "requiere_mayuscula": pol["requiere_mayuscula"],
+        "requiere_minuscula": pol["requiere_minuscula"],
+        "requiere_numero": pol["requiere_numero"],
+        "requiere_especial": pol["requiere_especial"],
+        "max_dias_vigencia": pol["max_dias_vigencia"],
     }
+
+
+@router.get("/config-publica")
+def config_publica():
+    """Datos públicos que la app necesita antes de iniciar sesión (CAPTCHA). Sin secretos."""
+    return {"captcha": captcha.configuracion_publica(), "politica_version": settings.POLITICA_VERSION}
+
+
+def registrar_consentimiento(db: Session, request: Request, usuario: Usuario) -> None:
+    """Guarda la aceptación de la versión vigente de la política con su finalidad (sin commit)."""
+    ahora_ = ahora()
+    usuario.politica_aceptada_version = settings.POLITICA_VERSION
+    usuario.politica_aceptada_en = ahora_
+    usuario.politica_finalidad = settings.FINALIDAD_CONSENTIMIENTO_USUARIO
+    usuario.consentimiento_revocado_en = None
+    db.add(ConsentimientoUsuario(usuario_id=usuario.id, version_politica=settings.POLITICA_VERSION,
+                                 finalidad=settings.FINALIDAD_CONSENTIMIENTO_USUARIO, fecha=ahora_, ip=ip_cliente(request)))
 
 
 @router.post("/registro", response_model=UsuarioRespuesta, status_code=201, dependencies=[Depends(limite("registro"))])
 def registrar_usuario(datos: UsuarioRegistro, request: Request, db: Session = Depends(get_db)):
-    ip = request.client.host if request.client else None
-    verificar_captcha(datos.captcha_token, ip)
+    verificar_captcha(datos.captcha_token, request, db, "registro")
 
     if db.query(Usuario).filter(Usuario.email == datos.email).first():
         audit.registrar(db, request, None, "auth", "registro", resultado="fallo", email=datos.email, detalle="correo ya registrado")
@@ -90,23 +112,33 @@ def registrar_usuario(datos: UsuarioRegistro, request: Request, db: Session = De
     ahora_ = ahora()
     nuevo = Usuario(
         email=datos.email, password_hash=hash_password(datos.password), nombre=datos.nombre, rol=ROL_DERMATOLOGO,
-        password_cambiada_en=ahora_, politica_aceptada_version=settings.POLITICA_VERSION, politica_aceptada_en=ahora_,
-        email_verificado=not settings.VERIFICAR_EMAIL_REGISTRO,
+        password_cambiada_en=ahora_, email_verificado=not settings.VERIFICAR_EMAIL_REGISTRO,
     )
     db.add(nuevo)
+    db.flush()
+    registrar_consentimiento(db, request, nuevo)
     db.commit()
     db.refresh(nuevo)
     asegurar_suscripcion(db, nuevo)
     if not nuevo.email_verificado:
         _enviar_verificacion(db, nuevo)
     audit.registrar(db, request, nuevo, "auth", "registro", entidad="usuario", entidad_id=nuevo.id,
-                    despues={"email": nuevo.email, "rol": nuevo.rol, "politica": settings.POLITICA_VERSION})
+                    despues={"email": nuevo.email, "rol": nuevo.rol, "politica": settings.POLITICA_VERSION,
+                             "finalidad": settings.FINALIDAD_CONSENTIMIENTO_USUARIO})
     return nuevo
 
 
-@router.post("/login", response_model=Token, dependencies=[Depends(limite("login"))])
-def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    email = form_data.username.strip().lower()
+@router.post("/login", response_model=Token, dependencies=[Depends(limite("login", solo_verificar=True))])
+def login(
+    request: Request,
+    username: str = Form(..., max_length=254),
+    password: str = Form(..., max_length=128),
+    captcha_token: str | None = Form(None, max_length=4096),
+    db: Session = Depends(get_db),
+):
+    """Formulario OAuth2 (username = correo). Para el límite por IP cuentan solo los intentos fallidos."""
+    verificar_captcha(captcha_token, request, db, "login")
+    email = username.strip().lower()
     usuario = db.query(Usuario).filter(Usuario.email == email).first()
     ahora_ = ahora()
 
@@ -116,7 +148,7 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
         raise HTTPException(429, f"Demasiados intentos fallidos. Por seguridad, esperá {minutos} minuto(s) y volvé a intentar.")
 
     hash_a_verificar = usuario.password_hash if usuario else hash_password("contraseña-inexistente")
-    correcta = verify_password(form_data.password, hash_a_verificar)
+    correcta = verify_password(password, hash_a_verificar)
 
     if not usuario or not correcta:
         if usuario:
@@ -125,7 +157,8 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
                 usuario.bloqueado_hasta = ahora_ + timedelta(minutes=settings.LOGIN_LOCK_MINUTES)
                 usuario.intentos_fallidos = 0
             db.commit()
-        audit.registrar(db, request, usuario, "auth", "login", resultado="fallo", email=email, detalle="credenciales incorrectas")
+        anotar_intento(request, "login", db)
+        audit.registrar(db, request, usuario, "auth", "login", resultado="fallo", email=email[:254], detalle="credenciales incorrectas")
         raise HTTPException(401, MSG_CREDENCIALES)
 
     if not usuario.activo:
@@ -138,14 +171,12 @@ def login(request: Request, form_data: OAuth2PasswordRequestForm = Depends(), db
 
     usuario.intentos_fallidos = 0
     usuario.bloqueado_hasta = None
-    token = crear_sesion(db, usuario, request.client.host if request.client else None)
-    vencida = bool(
-        settings.PASSWORD_MAX_AGE_DAYS
-        and usuario.password_cambiada_en
-        and ahora_ - usuario.password_cambiada_en > timedelta(days=settings.PASSWORD_MAX_AGE_DAYS)
-    )
+    token = crear_sesion(db, usuario, ip_cliente(request))
     audit.registrar(db, request, usuario, "auth", "login")
-    return {"access_token": token, "token_type": "bearer", "password_vencida": vencida}
+    # Con la contraseña vencida o la política pendiente, el resto de los endpoints responde 403
+    # hasta que el usuario lo resuelva (ver core.security.obtener_usuario_actual).
+    return {"access_token": token, "token_type": "bearer", "password_vencida": password_vencida(usuario),
+            "politica_pendiente": politica_pendiente(usuario), "politica_version": settings.POLITICA_VERSION}
 
 
 @router.post("/logout")
@@ -182,6 +213,7 @@ def verificar_correo(request: Request, token: str = Query(..., min_length=20, ma
 @router.post("/reenviar-verificacion", dependencies=[Depends(limite("reenviar", 5, 60))])
 def reenviar_verificacion(datos: SolicitudReenvio, request: Request, db: Session = Depends(get_db)):
     """Respuesta siempre igual para no revelar qué correos están registrados."""
+    verificar_captcha(datos.captcha_token, request, db, "reenviar_verificacion")
     usuario = db.query(Usuario).filter(Usuario.email == datos.email.lower()).first()
     if usuario and usuario.activo and not usuario.email_verificado:
         _enviar_verificacion(db, usuario)
@@ -189,9 +221,13 @@ def reenviar_verificacion(datos: SolicitudReenvio, request: Request, db: Session
     return {"mensaje": "Si la cuenta existe y falta confirmarla, te enviamos un nuevo enlace. Revisá tu bandeja de entrada y el correo no deseado."}
 
 
-@router.get("/perfil", response_model=UsuarioRespuesta)
+@router.get("/perfil", response_model=PerfilRespuesta)
 def obtener_perfil(usuario_actual: Usuario = Depends(obtener_usuario_actual)):
-    return usuario_actual
+    perfil = PerfilRespuesta.model_validate(usuario_actual)
+    perfil.password_vencida = password_vencida(usuario_actual)
+    perfil.politica_pendiente = politica_pendiente(usuario_actual)
+    perfil.politica_version = settings.POLITICA_VERSION
+    return perfil
 
 
 @router.post("/cambiar-contrasena")
@@ -202,6 +238,11 @@ def cambiar_contrasena(
     if not verify_password(datos.password_actual, usuario.password_hash):
         audit.registrar_fallo(db, request, usuario, "auth", "cambiar_contrasena", "contraseña actual incorrecta")
         raise HTTPException(400, "La contraseña actual no es correcta. Revisala e intentá de nuevo.")
+    problemas = errores_password(datos.password, usuario.email)  # ahora sí se conoce el correo
+    if problemas:
+        raise HTTPException(422, "La contraseña " + "; ".join(problemas) + ".")
+    if verify_password(datos.password, usuario.password_hash):
+        raise HTTPException(422, "La contraseña nueva tiene que ser distinta de la actual.")
     usuario.password_hash = hash_password(datos.password)
     usuario.password_cambiada_en = ahora()
     usuario.fecha_modificacion = ahora()
@@ -214,6 +255,7 @@ def cambiar_contrasena(
 @router.post("/recuperar-contrasena", dependencies=[Depends(limite("recuperar", 5, 60))])
 def recuperar_contrasena(datos: SolicitudRestablecer, request: Request, db: Session = Depends(get_db)):
     """Paso 1: envía un enlace de un solo uso. La respuesta es siempre la misma para no revelar qué correos existen."""
+    verificar_captcha(datos.captcha_token, request, db, "recuperar_contrasena")
     respuesta = {"mensaje": "Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña. Revisá tu bandeja de entrada."}
     email = datos.email.lower()
     usuario = db.query(Usuario).filter(Usuario.email == email).first()
@@ -242,6 +284,7 @@ def recuperar_contrasena(datos: SolicitudRestablecer, request: Request, db: Sess
 @router.post("/restablecer-contrasena", dependencies=[Depends(limite("restablecer", 10, 60))])
 def restablecer_contrasena(datos: Restablecer, request: Request, db: Session = Depends(get_db)):
     """Paso 2: el usuario define su nueva contraseña con el token recibido por correo."""
+    verificar_captcha(datos.captcha_token, request, db, "restablecer_contrasena")
     fila = (
         db.query(TokenRestablecimiento)
         .filter(TokenRestablecimiento.token_hash == _hash_token(datos.token), TokenRestablecimiento.tipo == TOKEN_RESTABLECER)
@@ -254,6 +297,9 @@ def restablecer_contrasena(datos: Restablecer, request: Request, db: Session = D
     usuario = db.get(Usuario, fila.usuario_id)
     if not usuario or not usuario.activo:
         raise HTTPException(400, "El enlace no es válido o ya venció. Pedí uno nuevo desde «Olvidé mi contraseña».")
+    problemas = errores_password(datos.password, usuario.email)
+    if problemas:
+        raise HTTPException(422, "La contraseña " + "; ".join(problemas) + ".")
 
     fila.usado_en = ahora_  # un solo uso
     if not usuario.email_verificado:  # abrir un enlace enviado al correo también prueba que es suyo

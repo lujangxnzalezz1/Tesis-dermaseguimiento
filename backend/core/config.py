@@ -41,8 +41,25 @@ class Settings(BaseSettings):
     RATE_LIMIT_ENABLED: bool = True
     RATE_LIMIT_AUTH_MAX: int = 10  # peticiones por ventana y por IP (login/registro)
     RATE_LIMIT_AUTH_WINDOW_SECONDS: int = 60
-    CAPTCHA_SECRET: str = ""  # si está vacío, el CAPTCHA queda desactivado
-    CAPTCHA_VERIFY_URL: str = "https://www.google.com/recaptcha/api/siteverify"
+
+    # --- seguridad (wb) ---
+    # CAPTCHA: turnstile (Cloudflare) | hcaptcha | recaptcha. Si CAPTCHA_SECRET está vacío queda desactivado.
+    CAPTCHA_PROVIDER: str = "turnstile"
+    CAPTCHA_SECRET: str = ""
+    CAPTCHA_SITE_KEY: str = ""        # clave pública: la app la obtiene de GET /config-publica
+    CAPTCHA_VERIFY_URL: str = ""      # vacío = la URL oficial del proveedor elegido
+    CAPTCHA_PUNTAJE_MINIMO: float = 0.5  # solo reCAPTCHA v3 (que devuelve un puntaje de 0 a 1)
+    # La app nativa no tiene widget de CAPTCHA (no se instaló react-native-webview). Con true, el servidor
+    # acepta sin CAPTCHA las solicitudes que llegan con la cabecera «X-Cliente: app-nativa». La cabecera
+    # se puede falsificar: activarlo deja como protección solo el límite de frecuencia y el bloqueo de cuenta.
+    CAPTCHA_EXIMIR_APP_NATIVA: bool = False
+    # Límite de frecuencia: "base" guarda los intentos en la base (sirve con varios procesos); "memoria" no.
+    RATE_LIMIT_BACKEND: str = "base"
+    # IPs o redes (CIDR) de los proxies inversos de confianza, separadas por coma. Solo si la conexión
+    # viene de uno de ellos se lee la IP real de X-Forwarded-For / X-Real-IP. Vacío = no se confía en nadie.
+    TRUSTED_PROXIES: str = ""
+    # Política de privacidad: finalidad que se registra con el consentimiento del profesional
+    FINALIDAD_CONSENTIMIENTO_USUARIO: str = "uso del sistema"
 
     # --- Verificación del correo electrónico ---
     VERIFICAR_DOMINIO_EMAIL: bool = True     # consulta DNS: el dominio debe existir y poder recibir correos
@@ -114,7 +131,7 @@ class Settings(BaseSettings):
     # --- Privacidad ---
     POLITICA_VERSION: str = "1.0"
     RESPONSABLE_TRATAMIENTO: str = "Luján Esmeralda González López (UNIDA)"
-    CONTACTO_PRIVACIDAD: str = "lujangxnzalezz1@gmail.com"
+    CONTACTO_PRIVACIDAD: str = ""  # obligatorio en producción (.env): correo para ejercer derechos
     RETENCION_DATOS_ANIOS: int = 5
 
     # --- Suscripciones y pagos ---
@@ -135,7 +152,7 @@ class Settings(BaseSettings):
                               r"|https://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):8443)")
     EMISOR_NOMBRE: str = "DermaSeguimiento"
     EMISOR_RUC: str = ""
-    EMISOR_EMAIL: str = "lujangxnzalezz1@gmail.com"
+    EMISOR_EMAIL: str = ""  # correo que figura en los comprobantes (.env)
 
     # --- Correo (valores por defecto; se pueden sobrescribir desde la API de administración) ---
     SMTP_HOST: str = ""

@@ -2,8 +2,10 @@
 
 Prioridad de configuración: tabla `configuracion_correo` (editable por el admin)
 y, si no hay fila, variables de entorno. Si el servicio está deshabilitado, el
-mensaje se registra en el log del servidor (útil en desarrollo)."""
+mensaje se registra en el log del servidor (útil en desarrollo), con los tokens de los
+enlaces enmascarados: un log nunca debe permitir restablecer la contraseña de nadie."""
 import logging
+import re
 import smtplib
 import ssl
 from email.message import EmailMessage
@@ -47,6 +49,17 @@ PLANTILLAS_POR_DEFECTO = {
 }
 
 
+# token=<valor> en enlaces y cualquier cadena larga con aspecto de token (url-safe, 24+ caracteres)
+_RE_TOKEN_EN_ENLACE = re.compile(r"(token=)([A-Za-z0-9_\-]{6})[A-Za-z0-9_\-%]*")
+_RE_TOKEN_SUELTO = re.compile(r"\b([A-Za-z0-9_\-]{6})[A-Za-z0-9_\-]{18,}\b")
+
+
+def enmascarar_tokens(texto: str) -> str:
+    """Deja solo los primeros 6 caracteres de cada token como pista (para reconocerlo en pruebas)."""
+    texto = _RE_TOKEN_EN_ENLACE.sub(r"\1\2…[oculto]", texto)
+    return _RE_TOKEN_SUELTO.sub(r"\1…[oculto]", texto)
+
+
 def configuracion_efectiva(db: Session) -> dict:
     fila = db.query(ConfiguracionCorreo).filter(ConfiguracionCorreo.id == 1).first()
     if fila:
@@ -80,7 +93,7 @@ def enviar(db: Session, destinatario: str, codigo: str, contexto: dict) -> bool:
     cfg = configuracion_efectiva(db)
 
     if not (cfg["habilitado"] and cfg["host"]):
-        log.warning("[CORREO DESHABILITADO] Para: %s | Asunto: %s\n%s", destinatario, asunto, cuerpo)
+        log.warning("[CORREO DESHABILITADO] Para: %s | Asunto: %s\n%s", destinatario, asunto, enmascarar_tokens(cuerpo))
         return False
 
     mensaje = EmailMessage()

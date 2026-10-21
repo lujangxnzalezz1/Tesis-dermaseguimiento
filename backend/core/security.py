@@ -1,3 +1,4 @@
+import ipaddress
 import uuid
 from datetime import timedelta
 from typing import Optional
@@ -76,14 +77,41 @@ def obtener_sesion_actual(token: str = Depends(oauth2_scheme), db: Session = Dep
     return sesion
 
 
+# Rutas que siguen disponibles con la contraseña vencida o la política pendiente de aceptar:
+# justamente las que permiten resolverlo (además de /logout, que no pide el usuario).
+RUTAS_SIN_BLOQUEO = {"/perfil", "/cambiar-contrasena", "/aceptar-politica", "/cuenta/eliminar"}
+
+MSG_PASSWORD_VENCIDA = ("Tu contraseña venció. Por seguridad, cambiala desde «Mi cuenta» para seguir usando el sistema.")
+MSG_POLITICA_PENDIENTE = ("Actualizamos la Política de Privacidad. Leela y aceptala para seguir usando el sistema.")
+
+
+def password_vencida(usuario: Usuario) -> bool:
+    from core.politica_password import politica_vigente  # importación diferida: evita un ciclo
+
+    dias = politica_vigente()["max_dias_vigencia"]
+    return bool(dias and usuario.password_cambiada_en and ahora() - usuario.password_cambiada_en > timedelta(days=dias))
+
+
+def politica_pendiente(usuario: Usuario) -> bool:
+    return usuario.politica_aceptada_version != settings.POLITICA_VERSION
+
+
 def obtener_usuario_actual(
-    sesion: Sesion = Depends(obtener_sesion_actual), db: Session = Depends(get_db)
+    request: Request, sesion: Sesion = Depends(obtener_sesion_actual), db: Session = Depends(get_db)
 ) -> Usuario:
     """Dependencia reutilizable: valida el token y devuelve el usuario logueado.
-    Cualquier endpoint que la use queda protegido automáticamente."""
+    Cualquier endpoint que la use queda protegido automáticamente. Si la contraseña venció o hay
+    una versión nueva de la política sin aceptar, se bloquea todo salvo lo necesario para resolverlo."""
     usuario = db.query(Usuario).filter(Usuario.id == sesion.usuario_id).first()
     if usuario is None or not usuario.activo:
         raise _no_autenticado("Tu cuenta no está activa. Contactá al administrador.")
+    if request.url.path not in RUTAS_SIN_BLOQUEO:
+        if password_vencida(usuario):
+            raise HTTPException(status_code=403, detail=MSG_PASSWORD_VENCIDA, headers={"X-Motivo": "password_vencida"})
+        # Las cuentas sin ninguna versión registrada (anteriores al registro del consentimiento o creadas
+        # por script) reciben el aviso al ingresar, pero el bloqueo aplica a quien aceptó una versión anterior.
+        if usuario.politica_aceptada_version is not None and politica_pendiente(usuario):
+            raise HTTPException(status_code=403, detail=MSG_POLITICA_PENDIENTE, headers={"X-Motivo": "politica_pendiente"})
     return usuario
 
 
@@ -101,5 +129,37 @@ def requiere_rol(*roles: str):
     return _dep
 
 
+def _redes_de_confianza() -> list:
+    redes = []
+    for parte in settings.TRUSTED_PROXIES.split(","):
+        parte = parte.strip()
+        if parte:
+            try:
+                redes.append(ipaddress.ip_network(parte, strict=False))
+            except ValueError:
+                pass  # una entrada mal escrita no debe tumbar el servidor; simplemente no se confía en ella
+    return redes
+
+
+def _es_de_confianza(ip: Optional[str], redes: list) -> bool:
+    try:
+        direccion = ipaddress.ip_address(ip)
+    except (TypeError, ValueError):
+        return False
+    return any(direccion in red for red in redes)
+
+
 def ip_cliente(request: Request) -> Optional[str]:
-    return request.client.host if request.client else None
+    """IP real del cliente. Las cabeceras X-Forwarded-For / X-Real-IP las puede escribir cualquiera,
+    así que solo se leen cuando la conexión llega desde un proxy listado en TRUSTED_PROXIES."""
+    directa = request.client.host if request.client else None
+    redes = _redes_de_confianza()
+    if not redes or not _es_de_confianza(directa, redes):
+        return directa
+    reenviadas = [p.strip() for p in request.headers.get("x-forwarded-for", "").split(",") if p.strip()]
+    # Se recorre de derecha a izquierda: la primera IP que no es un proxy propio es la del cliente
+    for ip in reversed(reenviadas):
+        if not _es_de_confianza(ip, redes):
+            return ip
+    real = request.headers.get("x-real-ip", "").strip()
+    return real or (reenviadas[0] if reenviadas else directa)
