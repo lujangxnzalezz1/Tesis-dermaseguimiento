@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
 import { Text, View } from 'react-native';
-import { Aviso, Boton, Campo, COLOR, FUENTE, Pantalla, Tarjeta } from '../components/ui';
+import { MSG_FALTA_CAPTCHA, useCaptcha } from '../components/Captcha';
+import { Aviso, Boton, Campo, COLOR, FUENTE, Pantalla, PieLegal, Tarjeta } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { guardarToken, obtenerToken } from '../lib/auth';
 import { EMAIL_RE } from '../lib/politica';
@@ -15,6 +16,7 @@ export default function LoginScreen() {
   const [sinConfirmar, setSinConfirmar] = useState(false);
   const [info, setInfo] = useState<string | null>(null);
   const [reenviando, setReenviando] = useState(false);
+  const captcha = useCaptcha();
 
   // Con una sesión guardada no hace falta volver a ingresar.
   useEffect(() => {
@@ -27,22 +29,30 @@ export default function LoginScreen() {
     setSinConfirmar(false);
     if (!EMAIL_RE.test(email.trim())) return setError('Escribí un correo electrónico válido, por ejemplo nombre@dominio.com.');
     if (!password) return setError('Escribí tu contraseña para continuar.');
+    if (captcha.falta) return setError(MSG_FALTA_CAPTCHA);
     setCargando(true);
     const body = new URLSearchParams({ username: email.trim(), password });
+    if (captcha.token) body.append('captcha_token', captcha.token);
     const r = await api('/login', { method: 'POST', form: body, auth: false });
     setCargando(false);
+    captcha.reiniciar(); // el token del CAPTCHA es de un solo uso
     if (!r.ok) {
       setSinConfirmar(r.status === 403 && mensaje(r).includes('confirmaste tu correo'));
       return setError(mensaje(r, 'No pudimos iniciar tu sesión. Intentá de nuevo.'));
     }
     await guardarToken(r.data.access_token);
-    router.replace(r.data.password_vencida ? '/cuenta' : '/pacientes');
+    const siguiente = r.data.password_vencida ? '/cuenta' : '/pacientes';
+    // Si cambió la política de privacidad, primero hay que leerla y aceptarla
+    if (r.data.politica_pendiente) router.replace({ pathname: '/privacidad', params: { aceptar: '1', siguiente } });
+    else router.replace(siguiente);
   };
 
   const reenviar = async () => {
+    if (captcha.falta) return setError(MSG_FALTA_CAPTCHA);
     setReenviando(true);
-    const r = await api('/reenviar-verificacion', { method: 'POST', json: { email: email.trim() }, auth: false });
+    const r = await api('/reenviar-verificacion', { method: 'POST', json: { email: email.trim(), captcha_token: captcha.token }, auth: false });
     setReenviando(false);
+    captcha.reiniciar();
     if (!r.ok) return setError(mensaje(r));
     setError(null);
     setSinConfirmar(false);
@@ -70,6 +80,7 @@ export default function LoginScreen() {
         <Campo etiqueta="Correo electrónico" value={email} onChangeText={setEmail} autoCapitalize="none" keyboardType="email-address" autoComplete="email" maxLength={120} placeholder="nombre@consultorio.com" />
         <Campo etiqueta="Contraseña" value={password} onChangeText={setPassword} secureTextEntry autoComplete="password" maxLength={128} onSubmitEditing={ingresar} returnKeyType="go" />
         <Boton texto="¿Olvidaste tu contraseña?" variante="texto" onPress={() => router.push('/recuperar')} estilo={{ alignSelf: 'flex-end', paddingHorizontal: 0, marginTop: -6, marginBottom: 4 }} />
+        {captcha.widget}
         <Boton texto="Ingresar" onPress={ingresar} cargando={cargando} />
       </Tarjeta>
       <View style={{ alignItems: 'center', gap: 4, marginTop: 18 }}>
@@ -77,9 +88,8 @@ export default function LoginScreen() {
           <Text style={{ fontFamily: FUENTE.texto, color: COLOR.textoSuave, fontSize: 14 }}>¿Primera vez?</Text>
           <Boton texto="Creá tu cuenta" variante="texto" onPress={() => router.push('/registro')} estilo={{ paddingHorizontal: 6 }} />
         </View>
-        <Boton texto="Política de privacidad" icono="lock-closed-outline" variante="texto" onPress={() => router.push('/privacidad')} />
-        <Text style={{ fontFamily: FUENTE.texto, color: COLOR.textoSuave, fontSize: 12 }}>Datos protegidos según la Ley N.º 7593/2025</Text>
       </View>
+      <PieLegal alAbrir={() => router.push('/privacidad')} />
     </Pantalla>
   );
 }

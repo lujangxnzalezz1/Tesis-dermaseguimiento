@@ -59,7 +59,8 @@ export function CampoFecha({
             style={[borde, { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 12 }]}>
             <Text style={{ fontSize: 16, color: valor ? '#222' : '#999' }}>{valor ? legible(valor) : 'Elegir fecha'}</Text>
             <View style={{ flexDirection: 'row', gap: 10 }}>
-              {valor ? <Ionicons name="close-circle" size={22} color="#999" onPress={() => onCambio('')} /> : null}
+              {valor ? <Ionicons name="close-circle" size={22} color="#999" onPress={() => onCambio('')} accessibilityRole="button"
+                accessibilityLabel={`Borrar ${etiqueta}`} hitSlop={10} /> : null}
               <Ionicons name="calendar-outline" size={22} color={COLOR.primario} />
             </View>
           </TouchableOpacity>

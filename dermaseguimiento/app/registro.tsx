@@ -2,7 +2,8 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { avisar } from '../lib/dialogo';
-import { Aviso, Boton, Campo, Casilla, COLOR, Pantalla, ReglasPassword, Titulo } from '../components/ui';
+import { MSG_FALTA_CAPTCHA, useCaptcha } from '../components/Captcha';
+import { Aviso, Boton, Campo, Casilla, COLOR, Pantalla, PieLegal, ReglasPassword, Titulo } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { EMAIL_RE, usePoliticaPassword } from '../lib/politica';
 
@@ -15,6 +16,7 @@ export default function RegistroScreen() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { reglas, cumple } = usePoliticaPassword(password);
+  const captcha = useCaptcha();
 
   const enviar = async () => {
     setError(null);
@@ -23,12 +25,15 @@ export default function RegistroScreen() {
     if (!cumple) return setError('La contraseña todavía no cumple todos los requisitos de la lista.');
     if (password !== confirmar) return setError('Las contraseñas no coinciden. Escribilas de nuevo.');
     if (!acepta) return setError('Para crear tu cuenta tenés que aceptar la Política de Privacidad.');
+    if (captcha.falta) return setError(MSG_FALTA_CAPTCHA);
     setCargando(true);
     const r = await api('/registro', {
       method: 'POST', auth: false,
-      json: { nombre: nombre.trim(), email: email.trim(), password, confirmar_password: confirmar, acepta_politica: acepta },
+      json: { nombre: nombre.trim(), email: email.trim(), password, confirmar_password: confirmar, acepta_politica: acepta,
+              captcha_token: captcha.token },
     });
     setCargando(false);
+    captcha.reiniciar();
     if (!r.ok) return setError(mensaje(r));
     avisar(
       '¡Cuenta creada!',
@@ -56,7 +61,9 @@ export default function RegistroScreen() {
           <Text style={{ color: COLOR.primario, textDecorationLine: 'underline' }} onPress={() => router.push('/privacidad')}>Política de Privacidad</Text>.
         </Text>
       </Casilla>
+      {captcha.widget}
       <Boton texto="Crear cuenta" icono="person-add-outline" onPress={enviar} cargando={cargando} />
+      <PieLegal alAbrir={() => router.push('/privacidad')} />
     </Pantalla>
   );
 }

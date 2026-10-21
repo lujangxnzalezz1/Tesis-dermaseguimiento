@@ -123,14 +123,36 @@ export function Tarjeta({ children, color = COLOR.tarjeta, estilo }: { children:
   return <View style={[estilos.tarjeta, { backgroundColor: color }, estilo]}>{children}</View>;
 }
 
-/** Botón cuadrado solo con ícono: SIEMPRE lleva etiqueta accesible (lectores de pantalla y tooltip en web). */
-export function BotonIcono({ icono, etiqueta, onPress, marca }: { icono: IconName; etiqueta: string; onPress: () => void; marca?: boolean }) {
+// Rótulos visibles más cortos para que entren debajo del ícono (la etiqueta accesible sigue completa)
+const ROTULOS_CORTOS: Record<string, string> = { 'Administración': 'Admin', 'Cerrar sesión': 'Salir' };
+
+/** Botón con ícono y un rótulo corto visible debajo (no solo el ícono: no todos reconocen los símbolos).
+ *  SIEMPRE lleva etiqueta accesible completa (lectores de pantalla y tooltip en web). Si no se indica
+ *  `rotulo`, se usa la etiqueta hasta la primera coma («Suscripción, 2 avisos» → «Suscripción») o sin el
+ *  destinatario («Dar de baja a Ana» → «Dar de baja»). */
+export function BotonIcono({ icono, etiqueta, onPress, marca, rotulo }: { icono: IconName; etiqueta: string; onPress: () => void; marca?: boolean; rotulo?: string }) {
+  const base = etiqueta.split(',')[0].replace(/ a .+$/, '').trim();
+  const texto = rotulo ?? ROTULOS_CORTOS[base] ?? base;
   return (
     <TouchableOpacity accessibilityRole="button" accessibilityLabel={etiqueta} onPress={onPress} {...(Platform.OS === 'web' ? { title: etiqueta } as any : {})}
-      style={{ width: 46, height: 46, borderRadius: 16, backgroundColor: COLOR.tarjeta, alignItems: 'center', justifyContent: 'center', marginLeft: 6, ...SOMBRA }}>
-      <Ionicons name={icono} size={22} color={COLOR.primario} />
-      {marca && <View style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: 5, backgroundColor: COLOR.aviso }} />}
+      style={{ width: 62, alignItems: 'center', marginLeft: 4 }}>
+      <View style={{ width: 46, height: 46, borderRadius: 16, backgroundColor: COLOR.tarjeta, alignItems: 'center', justifyContent: 'center', ...SOMBRA }}>
+        <Ionicons name={icono} size={22} color={COLOR.primario} />
+        {marca && <View style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: 5, backgroundColor: COLOR.aviso }} />}
+      </View>
+      <Text numberOfLines={1} importantForAccessibility="no" accessibilityElementsHidden
+        style={{ fontFamily: FUENTE.textoMedio, fontSize: 11, color: COLOR.textoSuave, marginTop: 4, textAlign: 'center' }}>{texto}</Text>
     </TouchableOpacity>
+  );
+}
+
+/** Pie de las pantallas públicas: enlace a la política de privacidad (Ley N.º 7593/2025). */
+export function PieLegal({ alAbrir }: { alAbrir: () => void }) {
+  return (
+    <View style={{ alignItems: 'center', gap: 2, marginTop: 24 }}>
+      <Boton texto="Política de privacidad" icono="lock-closed-outline" variante="texto" onPress={alAbrir} />
+      <Text style={{ fontFamily: FUENTE.texto, color: COLOR.textoSuave, fontSize: 12 }}>Datos protegidos según la Ley N.º 7593/2025</Text>
+    </View>
   );
 }
 

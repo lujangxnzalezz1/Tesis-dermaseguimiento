@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { Text } from 'react-native';
 import { avisar } from '../lib/dialogo';
-import { Aviso, Boton, Campo, Pantalla, ReglasPassword, Titulo, COLOR } from '../components/ui';
+import { MSG_FALTA_CAPTCHA, useCaptcha } from '../components/Captcha';
+import { Aviso, Boton, Campo, Pantalla, PieLegal, ReglasPassword, Titulo, COLOR } from '../components/ui';
 import { api, mensaje } from '../lib/api';
 import { usePoliticaPassword } from '../lib/politica';
 
@@ -15,15 +16,20 @@ export default function RestablecerScreen() {
   const [cargando, setCargando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { reglas, cumple } = usePoliticaPassword(password);
+  const captcha = useCaptcha();
 
   const enviar = async () => {
     setError(null);
     if (token.trim().length < 20) return setError('Pegá el código completo que llegó en el enlace del correo.');
     if (!cumple) return setError('La contraseña todavía no cumple todos los requisitos de la lista.');
     if (password !== confirmar) return setError('Las contraseñas no coinciden. Escribilas de nuevo.');
+    if (captcha.falta) return setError(MSG_FALTA_CAPTCHA);
     setCargando(true);
-    const r = await api('/restablecer-contrasena', { method: 'POST', auth: false, json: { token: token.trim(), password, confirmar_password: confirmar } });
+    const r = await api('/restablecer-contrasena', {
+      method: 'POST', auth: false, json: { token: token.trim(), password, confirmar_password: confirmar, captcha_token: captcha.token },
+    });
     setCargando(false);
+    captcha.reiniciar();
     if (!r.ok) return setError(mensaje(r));
     avisar('Listo', r.data.mensaje, () => router.replace('/'));
   };
@@ -37,8 +43,10 @@ export default function RestablecerScreen() {
       <Campo etiqueta="Nueva contraseña" value={password} onChangeText={setPassword} secureTextEntry maxLength={128} />
       <ReglasPassword reglas={reglas} />
       <Campo etiqueta="Repetí la nueva contraseña" value={confirmar} onChangeText={setConfirmar} secureTextEntry maxLength={128} />
+      {captcha.widget}
       <Boton texto="Guardar contraseña" icono="save-outline" onPress={enviar} cargando={cargando} />
       <Text style={{ color: COLOR.textoSuave, marginTop: 12, fontSize: 12 }}>El enlace se puede usar una sola vez y vence a los pocos minutos.</Text>
+      <PieLegal alAbrir={() => router.push('/privacidad')} />
     </Pantalla>
   );
 }
