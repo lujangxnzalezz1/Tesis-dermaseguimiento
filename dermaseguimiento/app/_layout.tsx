@@ -62,6 +62,8 @@ export default function RootLayout() {
       <Stack.Screen name="cuenta" options={{ title: 'Mi cuenta' }} />
       <Stack.Screen name="sus" options={{ title: 'Encuesta de usabilidad' }} />
       <Stack.Screen name="admin" options={{ title: 'Administración' }} />
+      <Stack.Screen name="planes" options={{ title: 'Planes' }} />
+      <Stack.Screen name="admin-planes" options={{ title: 'Planes (administración)' }} />
     </Stack>
   );
 }

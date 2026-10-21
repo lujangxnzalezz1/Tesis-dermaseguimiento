@@ -350,7 +350,7 @@ script.
 
 ```bash
 cd backend
-pytest                                                     # 297 pruebas automáticas (SQLite en memoria)
+pytest                                                     # 388 pruebas automáticas (SQLite en memoria)
 DATABASE_URL=postgresql+psycopg2://usuario@localhost/derma_pruebas pytest   # las mismas sobre PostgreSQL
 python -m scripts.validar_alineacion --semisinteticos 50   # validación de la alineación
 python -m scripts.medir_rnf foto1.jpg foto2.jpg 10         # tiempo de procesamiento (RNF-06)

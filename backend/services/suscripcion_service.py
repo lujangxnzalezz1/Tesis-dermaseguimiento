@@ -5,6 +5,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
 
 from fastapi import HTTPException
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -44,8 +45,9 @@ def _historial(db, susc, evento, anterior=None, nuevo=None, detalle=None):
 
 # --------------------------------------------------------------------------- estado
 
-def asegurar_suscripcion(db: Session, usuario: Usuario) -> Suscripcion:
-    """Todo usuario tiene una suscripción: prueba premium (si TRIAL_DAYS > 0) o plan gratuito."""
+def asegurar_suscripcion(db: Session, usuario: Usuario, confirmar: bool = True) -> Suscripcion:
+    """Todo usuario tiene una suscripción: prueba premium (si TRIAL_DAYS > 0) o plan gratuito.
+    Con confirmar=False no hace commit, para que el registro guarde usuario y suscripción juntos."""
     susc = db.query(Suscripcion).filter(Suscripcion.usuario_id == usuario.id).order_by(Suscripcion.id.desc()).first()
     if susc:
         return sincronizar(db, susc)
@@ -64,9 +66,15 @@ def asegurar_suscripcion(db: Session, usuario: Usuario) -> Suscripcion:
     else:
         raise HTTPException(500, "El sistema todavía no tiene planes configurados. Contactá al administrador.")
     db.add(susc)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # Otra solicitud creó la suscripción al mismo tiempo (usuario_id es único): se usa esa
+        db.rollback()
+        return db.query(Suscripcion).filter(Suscripcion.usuario_id == usuario.id).one()
     _historial(db, susc, "alta", None, susc.plan_id, detalle)
-    db.commit()
+    if confirmar:
+        db.commit()
     return susc
 
 

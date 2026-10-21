@@ -42,7 +42,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_AUTH_MAX: int = 10  # peticiones por ventana y por IP (login/registro)
     RATE_LIMIT_AUTH_WINDOW_SECONDS: int = 60
 
-    # --- seguridad (wb) ---
+    # --- Seguridad: CAPTCHA, límite de frecuencia y proxies ---
     # CAPTCHA: turnstile (Cloudflare) | hcaptcha | recaptcha. Si CAPTCHA_SECRET está vacío queda desactivado.
     CAPTCHA_PROVIDER: str = "turnstile"
     CAPTCHA_SECRET: str = ""
@@ -185,12 +185,15 @@ class Settings(BaseSettings):
     def avisos_dias(self) -> list[int]:
         return sorted({int(x) for x in self.AVISOS_DIAS_ANTES.split(",") if x.strip()}, reverse=True)
 
-    # --- pagos y planes (wa) ---
+    # --- Pagos y planes ---
     ADAMSPAY_TIMEOUT_SEGUNDOS: int = 15       # espera máxima de cada llamada al API de AdamsPay
     ADAMSPAY_VIGENCIA_HORAS: int = 24         # validez de la deuda: pasado este plazo ya no se puede pagar
     EMISOR_LOGO_RUTA: str = ""                # imagen (PNG/JPG) del logo del emisor en el recibo; vacío = sin logo
     COMPROBANTE_ENLACE_MINUTOS: int = 5       # validez del enlace de descarga del recibo (app nativa)
-    # --- fin pagos y planes (wa) ---
+
+    # Límites de los listados y exportaciones
+    MAX_PLANTILLAS: int = 50          # plantillas de indicaciones por profesional
+    MAX_FILAS_CSV: int = 20000        # filas máximas del CSV de auditoría
 
 
 settings = Settings()

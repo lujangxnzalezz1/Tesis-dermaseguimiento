@@ -38,6 +38,11 @@ def _mensaje(err: dict) -> str:
     tipo = err.get("type", "")
     if tipo == "value_error":
         msg = str(err.get("msg", ""))
+        # Los mensajes de la validación de correo (email-validator) vienen en inglés
+        if "email address" in msg:
+            if "special-use or reserved" in msg or "does not exist" in msg or "not accept email" in msg:
+                return "no es un correo válido: el dominio (lo que va después de la @) no recibe correos"
+            return "no es un correo electrónico válido"
         return msg.removeprefix("Value error, ")
     return _MENSAJES.get(tipo, "no es válido")
 

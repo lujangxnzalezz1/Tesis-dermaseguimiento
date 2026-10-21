@@ -3,12 +3,14 @@ import { ActivityIndicator, Text, TouchableOpacity, View } from 'react-native';
 import { Aviso, Boton, Campo, Casilla, COLOR, Confirmar, Pantalla, Subtitulo, Tarjeta, Titulo, FUENTE } from '../components/ui';
 import { api, fechaCorta, formatoMonto, mensaje } from '../lib/api';
 import { CampoFecha, hoyTexto } from '../components/CampoFecha';
+import AdminSeguridad from '../components/AdminSeguridad';
+import { router } from 'expo-router';
 
-type Seccion = 'usuarios' | 'suscripciones' | 'comprobantes' | 'pacientes' | 'auditoria' | 'correo';
+type Seccion = 'usuarios' | 'suscripciones' | 'comprobantes' | 'pacientes' | 'auditoria' | 'correo' | 'seguridad';
 const SECCIONES: { id: Seccion; texto: string }[] = [
   { id: 'usuarios', texto: 'Usuarios' }, { id: 'suscripciones', texto: 'Suscripciones' },
   { id: 'comprobantes', texto: 'Comprobantes' }, { id: 'pacientes', texto: 'Pacientes dados de baja' },
-  { id: 'auditoria', texto: 'Auditoría' }, { id: 'correo', texto: 'Correo' },
+  { id: 'auditoria', texto: 'Auditoría' }, { id: 'correo', texto: 'Correo' }, { id: 'seguridad', texto: 'Seguridad' },
 ];
 const TAM = 20;
 
@@ -44,8 +46,8 @@ export default function AdminScreen() {
           </TouchableOpacity>
         ))}
       </View>
-      {/* PUNTO DE MONTAJE (integración): acá van <AdminSeguridad /> y el enlace a la pantalla de planes
-          (router.push('/admin-planes')), que se desarrollan por separado. No agregar otra cosa en este lugar. */}
+      <Boton texto="Planes y precios" icono="pricetags-outline" variante="secundario" onPress={() => router.push('/admin-planes')} estilo={{ marginBottom: 10 }} />
+      {seccion === 'seguridad' && <AdminSeguridad />}
       {seccion === 'usuarios' && <Usuarios />}
       {seccion === 'suscripciones' && <Suscripciones />}
       {seccion === 'comprobantes' && <Comprobantes />}
@@ -265,6 +267,7 @@ function Comprobantes() {
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [anular, setAnular] = useState<any>(null);
+  const [reemitir, setReemitir] = useState<any>(null);
 
   const cargar = useCallback(async (p = 1) => {
     setError(null);
@@ -278,6 +281,12 @@ function Comprobantes() {
     const r = await api(`/admin/comprobantes/${c.id}/anular`, { method: 'POST', json: { motivo, confirmar: true } });
     if (!r.ok) return setError(mensaje(r));
     setInfo(r.data.mensaje); cargar(data?.pagina ?? 1);
+  };
+  const confirmarReemision = async () => {
+    const c = reemitir; setReemitir(null); setInfo(null); setError(null);
+    const r = await api(`/admin/comprobantes/${c.id}/reemitir`, { method: 'POST' });
+    if (!r.ok) { setError(mensaje(r, 'No se pudo emitir el comprobante nuevo.')); return; }
+    setInfo(r.data?.mensaje ?? `Se emitió el comprobante ${r.data?.numero ?? ''}.`); cargar(data?.pagina ?? 1);
   };
 
   return (
@@ -295,11 +304,17 @@ function Comprobantes() {
           <Text>{c.pagador_nombre} · {c.pagador_email}</Text>
           <Text style={{ color: COLOR.textoSuave }}>{c.concepto} · {fechaCorta(c.fecha_emision)}</Text>
           {c.estado === 'anulado'
-            ? <Text style={{ color: COLOR.error }}>Anulado el {fechaCorta(c.anulado_en)}{c.motivo_anulacion ? ` — ${c.motivo_anulacion}` : ''}</Text>
+            ? <>
+                <Text style={{ color: COLOR.error }}>Anulado el {fechaCorta(c.anulado_en)}{c.motivo_anulacion ? ` — ${c.motivo_anulacion}` : ''}</Text>
+                <Boton texto="Emitir un comprobante nuevo" icono="refresh-outline" variante="secundario" estilo={{ marginTop: 8 }} onPress={() => setReemitir(c)} />
+              </>
             : <Boton texto="Anular comprobante" icono="close-circle-outline" variante="peligro" estilo={{ marginTop: 8 }} onPress={() => setAnular(c)} />}
         </Tarjeta>
       ))}
       {data && data.items.length === 0 && <Text style={{ color: COLOR.textoSuave }}>No hay comprobantes con esos datos.</Text>}
+      <Confirmar visible={!!reemitir} titulo="¿Emitir un comprobante nuevo?"
+        mensaje={`Se emitirá un comprobante con número nuevo para el pago del comprobante anulado ${reemitir?.numero ?? ''}. El anulado no se modifica.`}
+        textoConfirmar="Sí, emitir" onConfirmar={confirmarReemision} onCancelar={() => setReemitir(null)} />
       <Confirmar visible={!!anular} peligro pedirMotivo motivoObligatorio titulo="¿Anular el comprobante?"
         mensaje={`El comprobante ${anular?.numero ?? ''} quedará anulado de forma permanente. Esta acción no se puede deshacer.`}
         textoConfirmar="Sí, anular" onConfirmar={confirmarAnulacion} onCancelar={() => setAnular(null)} />

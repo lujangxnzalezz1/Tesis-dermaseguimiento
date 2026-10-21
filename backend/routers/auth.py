@@ -117,9 +117,9 @@ def registrar_usuario(datos: UsuarioRegistro, request: Request, db: Session = De
     db.add(nuevo)
     db.flush()
     registrar_consentimiento(db, request, nuevo)
+    asegurar_suscripcion(db, nuevo, confirmar=False)  # usuario, consentimiento y suscripción en una sola transacción
     db.commit()
     db.refresh(nuevo)
-    asegurar_suscripcion(db, nuevo)
     if not nuevo.email_verificado:
         _enviar_verificacion(db, nuevo)
     audit.registrar(db, request, nuevo, "auth", "registro", entidad="usuario", entidad_id=nuevo.id,

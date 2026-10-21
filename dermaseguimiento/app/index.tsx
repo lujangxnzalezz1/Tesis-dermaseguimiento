@@ -88,6 +88,7 @@ export default function LoginScreen() {
           <Text style={{ fontFamily: FUENTE.texto, color: COLOR.textoSuave, fontSize: 14 }}>¿Primera vez?</Text>
           <Boton texto="Creá tu cuenta" variante="texto" onPress={() => router.push('/registro')} estilo={{ paddingHorizontal: 6 }} />
         </View>
+        <Boton texto="Ver planes y precios" icono="pricetags-outline" variante="texto" onPress={() => router.push('/planes')} />
       </View>
       <PieLegal alAbrir={() => router.push('/privacidad')} />
     </Pantalla>

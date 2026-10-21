@@ -8,6 +8,7 @@ from typing import Any, Optional
 from fastapi import Request
 from sqlalchemy.orm import Session
 
+from core.security import ip_cliente
 from models.auditoria import Auditoria
 from models.usuario import Usuario
 
@@ -61,7 +62,7 @@ def registrar(
             Auditoria(
                 usuario_id=usuario.id if usuario else usuario_id,
                 usuario_email=usuario.email if usuario else email,
-                ip=request.client.host if request is not None and request.client else None,
+                ip=ip_cliente(request) if request is not None else None,
                 modulo=modulo,
                 accion=accion,
                 entidad=entidad,

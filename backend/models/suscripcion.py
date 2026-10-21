@@ -47,7 +47,7 @@ class Suscripcion(Base):
     __tablename__ = "suscripciones"
 
     id = Column(Integer, primary_key=True)
-    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False, index=True)
+    usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False, unique=True, index=True)  # una por usuario
     plan_id = Column(Integer, ForeignKey("planes.id"), nullable=False)
     estado = Column(String, nullable=False, index=True)
     fecha_inicio = Column(DateTime, nullable=False, default=ahora)
@@ -75,6 +75,11 @@ class HistorialSuscripcion(Base):
 
 class Pago(Base):
     __tablename__ = "pagos"
+    __table_args__ = (
+        # A lo sumo un pago pendiente por suscripción y plan: evita cobrar dos veces si llegan dos checkouts a la vez
+        Index("uq_pago_pendiente_por_plan", "suscripcion_id", "plan_id", unique=True,
+              postgresql_where=text("estado = 'pendiente'"), sqlite_where=text("estado = 'pendiente'")),
+    )
 
     id = Column(Integer, primary_key=True)
     usuario_id = Column(Integer, ForeignKey("usuarios.id"), nullable=False, index=True)
