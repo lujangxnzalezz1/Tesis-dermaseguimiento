@@ -8,7 +8,7 @@ from typing import Optional
 import cv2
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from fastapi.responses import FileResponse
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from core.config import settings
@@ -324,29 +324,44 @@ def subir_foto_uv(seguimiento_id: int, request: Request, imagen: UploadFile = Fi
     return _a_respuesta(seg)
 
 
+def _plantillas_vigentes(db: Session, usuario: Usuario):
+    return db.query(PlantillaIndicacion).filter(PlantillaIndicacion.usuario_id == usuario.id, PlantillaIndicacion.eliminada_en.is_(None))
+
+
 @router.get("/plantillas-indicaciones", response_model=list[PlantillaRespuesta])
 def listar_plantillas(db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
-    return db.query(PlantillaIndicacion).filter(PlantillaIndicacion.usuario_id == usuario_actual.id).order_by(PlantillaIndicacion.titulo).all()
+    return _plantillas_vigentes(db, usuario_actual).order_by(PlantillaIndicacion.titulo).all()
 
 
 @router.post("/plantillas-indicaciones", response_model=PlantillaRespuesta, status_code=201)
-def crear_plantilla(datos: PlantillaNueva, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
-    if db.query(PlantillaIndicacion).filter(PlantillaIndicacion.usuario_id == usuario_actual.id).count() >= 50:
-        raise HTTPException(400, "Llegaste al máximo de 50 plantillas. Borrá alguna para crear otra.")
-    p = PlantillaIndicacion(usuario_id=usuario_actual.id, titulo=datos.titulo.strip(), texto=datos.texto.strip())
+def crear_plantilla(datos: PlantillaNueva, request: Request, db: Session = Depends(get_db),
+                    usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    maximo = getattr(settings, "MAX_PLANTILLAS", 50)
+    if _plantillas_vigentes(db, usuario_actual).count() >= maximo:
+        raise HTTPException(400, f"Llegaste al máximo de {maximo} plantillas. Borrá alguna para crear otra.")
+    titulo = datos.titulo.strip()
+    if _plantillas_vigentes(db, usuario_actual).filter(func.lower(PlantillaIndicacion.titulo) == titulo.lower()).first():
+        # La base también lo impide (índice único parcial); esto da un mensaje claro antes de llegar ahí.
+        raise HTTPException(409, f"Ya tenés una plantilla llamada «{titulo}». Elegí otro título o borrá la anterior.")
+    p = PlantillaIndicacion(usuario_id=usuario_actual.id, titulo=titulo, texto=datos.texto.strip())
     db.add(p)
     db.commit()
     db.refresh(p)
+    audit.registrar(db, request, usuario_actual, "seguimientos", "plantilla_crear", entidad="plantilla", entidad_id=p.id)
     return p
 
 
 @router.delete("/plantillas-indicaciones/{plantilla_id}", status_code=204)
-def borrar_plantilla(plantilla_id: int, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
-    p = db.query(PlantillaIndicacion).filter(PlantillaIndicacion.id == plantilla_id, PlantillaIndicacion.usuario_id == usuario_actual.id).first()
+def borrar_plantilla(plantilla_id: int, request: Request, db: Session = Depends(get_db),
+                     usuario_actual: Usuario = Depends(obtener_usuario_actual)):
+    """Borrado lógico: deja de listarse, pero el registro se conserva."""
+    p = _plantillas_vigentes(db, usuario_actual).filter(PlantillaIndicacion.id == plantilla_id).first()
     if not p:
         raise HTTPException(404, "No encontramos esa plantilla.")
-    db.delete(p)
+    p.eliminada_en = ahora()
     db.commit()
+    audit.registrar(db, request, usuario_actual, "seguimientos", "plantilla_borrar", entidad="plantilla", entidad_id=p.id,
+                    antes={"titulo": p.titulo})
     return Response(status_code=204)
 
 
@@ -382,6 +397,13 @@ def informe_pdf(seguimiento_id: int, request: Request, db: Session = Depends(get
                     headers={"Content-Disposition": f'attachment; filename="{nombre}"', "Cache-Control": "no-store"})
 
 
+COLUMNAS_RUTA = (
+    "ruta_imagen_referencia", "ruta_imagen_nueva", "ruta_imagen_alineada", "ruta_mapa_calor",
+    "ruta_imagen_lesiones", "ruta_imagen_periorbital", "ruta_imagen_manchas", "ruta_imagen_textura",
+    "ruta_imagen_uv", "ruta_imagen_uv_analisis", "ruta_mapa_rojez", "ruta_mapa_luminosidad",
+)
+
+
 @router.get("/archivos/{clave:path}")
 def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual)):
     """Las imágenes clínicas ya no son públicas: solo las ve el dermatólogo dueño del paciente."""
@@ -390,14 +412,8 @@ def descargar_archivo(clave: str, db: Session = Depends(get_db), usuario_actual:
         .join(Paciente, Paciente.id == Seguimiento.paciente_id)
         .filter(
             Paciente.dermatologo_id == usuario_actual.id,
-            or_(
-                Seguimiento.ruta_imagen_referencia == clave, Seguimiento.ruta_imagen_nueva == clave,
-                Seguimiento.ruta_imagen_alineada == clave, Seguimiento.ruta_mapa_calor == clave,
-                Seguimiento.ruta_imagen_lesiones == clave, Seguimiento.ruta_imagen_periorbital == clave,
-                Seguimiento.ruta_imagen_manchas == clave, Seguimiento.ruta_imagen_textura == clave,
-                Seguimiento.ruta_imagen_uv == clave, Seguimiento.ruta_imagen_uv_analisis == clave,
-                Seguimiento.ruta_mapa_rojez == clave, Seguimiento.ruta_mapa_luminosidad == clave,
-            ),
+            # Cada columna ruta_* tiene su índice: PostgreSQL combina los 12 (BitmapOr) sin recorrer la tabla.
+            or_(*(getattr(Seguimiento, c) == clave for c in COLUMNAS_RUTA)),
         )
         .first()
     )

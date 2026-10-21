@@ -12,7 +12,7 @@ from core.tiempo import ahora
 from models.paciente import ConsentimientoPaciente, Paciente
 from models.usuario import Usuario
 from schemas.paciente import (
-    PacienteActualizar, PacienteEliminar, PacienteRegistro, PacienteRespuesta,
+    PacienteActualizar, PacienteEliminar, PacienteReactivar, PacienteRegistro, PacienteRespuesta, RevocacionConsentimiento,
 )
 from services import auditoria_service as audit
 
@@ -43,10 +43,42 @@ def consentimiento_vigente(db: Session, paciente_id: int) -> Optional[Consentimi
     )
 
 
-def _respuesta(db: Session, p: Paciente) -> PacienteRespuesta:
+def ids_con_consentimiento(db: Session, ids: list[int]) -> set[int]:
+    """Una sola consulta para saber qué pacientes de una página tienen consentimiento vigente (evita N+1)."""
+    if not ids:
+        return set()
+    filas = (
+        db.query(ConsentimientoPaciente.paciente_id)
+        .filter(ConsentimientoPaciente.paciente_id.in_(ids), ConsentimientoPaciente.revocado_en.is_(None))
+        .distinct()
+        .all()
+    )
+    return {f[0] for f in filas}
+
+
+def _respuesta(db: Session, p: Paciente, con_consentimiento: Optional[set[int]] = None) -> PacienteRespuesta:
     r = PacienteRespuesta.model_validate(p)
-    r.tiene_consentimiento = consentimiento_vigente(db, p.id) is not None
+    if con_consentimiento is None:
+        r.tiene_consentimiento = consentimiento_vigente(db, p.id) is not None
+    else:
+        r.tiene_consentimiento = p.id in con_consentimiento
     return r
+
+
+def reactivar(db: Session, request: Request, actor: Usuario, paciente: Paciente, motivo: Optional[str]) -> None:
+    """Deshace la baja lógica (la usan el dermatólogo dueño y el administrador). Queda en la auditoría."""
+    if paciente.activo:
+        raise HTTPException(409, "Ese paciente ya está activo.")
+    antes = audit.instantanea(paciente, CAMPOS_AUDITADOS)
+    paciente.activo = True
+    paciente.eliminado_en = None
+    paciente.eliminado_por = None
+    paciente.motivo_eliminacion = None
+    paciente.fecha_modificacion = ahora()
+    paciente.version += 1
+    db.commit()
+    audit.registrar(db, request, actor, "pacientes", "reactivar", entidad="paciente", entidad_id=paciente.id,
+                    antes=antes, despues=audit.instantanea(paciente, CAMPOS_AUDITADOS), detalle=motivo)
 
 
 @router.get("/buscar/{cedula}")
@@ -83,7 +115,8 @@ def registrar_paciente(
         .first()
     )
     if existente:
-        detalle = ("Ese paciente estaba dado de baja. Contactá al administrador si necesitás recuperarlo."
+        detalle = ("Ese paciente estaba dado de baja. Podés reactivarlo desde tu lista de pacientes (filtro «Dados de baja») "
+                   "o pedírselo al administrador."
                    if not existente.activo else "Ya tenés un paciente registrado con esa cédula. Buscalo por su número.")
         raise HTTPException(409, detalle)
 
@@ -133,7 +166,8 @@ def listar_pacientes(
         consulta = consulta.filter(Paciente.fecha_creacion < datetime.combine(creado_hasta, datetime.min.time()) + timedelta(days=1))
     total = consulta.count()
     filas = consulta.order_by(Paciente.apellido, Paciente.nombre).offset((pagina - 1) * tamano).limit(tamano).all()
-    return {"items": [_respuesta(db, p) for p in filas], "total": total, "pagina": pagina, "tamano": tamano}
+    vigentes = ids_con_consentimiento(db, [p.id for p in filas])
+    return {"items": [_respuesta(db, p, vigentes) for p in filas], "total": total, "pagina": pagina, "tamano": tamano}
 
 
 @router.get("/{paciente_id}", response_model=PacienteRespuesta)
@@ -195,20 +229,39 @@ def dar_de_baja_paciente(
     db.commit()
     audit.registrar(db, request, usuario_actual, "pacientes", "baja_logica", entidad="paciente", entidad_id=paciente.id,
                     antes=antes, despues=audit.instantanea(paciente, CAMPOS_AUDITADOS), detalle=datos.motivo)
-    return {"mensaje": "El paciente se dio de baja. Su historial se conserva y puede recuperarlo el administrador."}
+    return {"mensaje": "El paciente se dio de baja. Su historial se conserva y podés reactivarlo desde «Dados de baja» "
+                       "(o pedírselo al administrador)."}
+
+
+@router.post("/{paciente_id}/reactivar", response_model=PacienteRespuesta)
+def reactivar_paciente(
+    paciente_id: int, datos: PacienteReactivar, request: Request, db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(obtener_usuario_actual),
+):
+    """El dermatólogo recupera a un paciente PROPIO que había dado de baja."""
+    if not datos.confirmar:
+        raise HTTPException(400, "Confirmá la reactivación del paciente para continuar.")
+    paciente = obtener_paciente_propio(db, usuario_actual, paciente_id, incluir_inactivos=True)
+    reactivar(db, request, usuario_actual, paciente, datos.motivo)
+    return _respuesta(db, paciente)
 
 
 @router.post("/{paciente_id}/consentimiento/revocar")
 def revocar_consentimiento(
-    paciente_id: int, request: Request, db: Session = Depends(get_db), usuario_actual: Usuario = Depends(obtener_usuario_actual),
+    paciente_id: int, request: Request, datos: Optional[RevocacionConsentimiento] = None, db: Session = Depends(get_db),
+    usuario_actual: Usuario = Depends(obtener_usuario_actual),
 ):
+    """El paciente retira su consentimiento. El cuerpo (motivo) es opcional para no romper clientes anteriores."""
+    motivo = datos.motivo if datos else None
     paciente = obtener_paciente_propio(db, usuario_actual, paciente_id)
     vigente = consentimiento_vigente(db, paciente.id)
     if not vigente:
         raise HTTPException(409, "Este paciente no tiene un consentimiento vigente.")
     vigente.revocado_en = ahora()
+    vigente.motivo_revocacion = motivo
     db.commit()
-    audit.registrar(db, request, usuario_actual, "pacientes", "consentimiento_revocado", entidad="paciente", entidad_id=paciente.id)
+    audit.registrar(db, request, usuario_actual, "pacientes", "consentimiento_revocado", entidad="paciente", entidad_id=paciente.id,
+                    detalle=motivo)
     return {"mensaje": "Se registró la revocación. No se podrán procesar nuevas fotos hasta obtener un nuevo consentimiento."}
 
 

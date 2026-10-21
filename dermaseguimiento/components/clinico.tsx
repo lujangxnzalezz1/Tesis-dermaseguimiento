@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { Platform, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { api, mensaje } from '../lib/api';
 import { elegirOrigenFoto } from '../lib/dialogo';
-import { Boton, COLOR, estilos, FUENTE, ImagenProtegida, num } from './ui';
+import { Boton, COLOR, Confirmar, estilos, FUENTE, ImagenProtegida, num } from './ui';
 
 const IGA = ['Sin lesiones', 'Casi limpio', 'Leve', 'Moderado', 'Severo'];
 const REGIONES_MASI: [string, string][] = [['frente', 'Frente'], ['malar_derecha', 'Mejilla derecha'], ['malar_izquierda', 'Mejilla izquierda'], ['menton', 'Mentón']];
@@ -178,6 +178,8 @@ export function Recomendaciones({ seguimientoId, inicial }: { seguimientoId: num
   const [plantillas, setPlantillas] = useState<{ id: number; titulo: string; texto: string }[]>([]);
   const [nombrando, setNombrando] = useState(false);
   const [titulo, setTitulo] = useState('');
+  const [errorTitulo, setErrorTitulo] = useState<string | null>(null);
+  const [aBorrar, setABorrar] = useState<{ id: number; titulo: string } | null>(null);
 
   const cargarPlantillas = () => api('/plantillas-indicaciones').then((r) => { if (r.ok) setPlantillas(r.data); });
   useEffect(() => { cargarPlantillas(); }, []);
@@ -190,12 +192,22 @@ export function Recomendaciones({ seguimientoId, inicial }: { seguimientoId: num
   };
   const insertar = (t: string) => { setTexto((x) => (x.trim() ? `${x.trimEnd()}\n${t}` : t)); setEstado({}); };
   const guardarPlantilla = async () => {
-    if (!titulo.trim() || !texto.trim()) return;
-    const r = await api('/plantillas-indicaciones', { method: 'POST', json: { titulo: titulo.trim(), texto: texto.trim() } });
-    if (!r.ok) return setEstado({ error: mensaje(r) });
-    setNombrando(false); setTitulo(''); cargarPlantillas();
+    const t = titulo.trim();
+    if (!t || !texto.trim()) return;
+    // El título no se repite entre tus plantillas (sin distinguir mayúsculas); el servidor también lo controla.
+    if (plantillas.some((p) => p.titulo.trim().toLowerCase() === t.toLowerCase())) {
+      return setErrorTitulo(`Ya tenés una plantilla llamada «${t}». Elegí otro nombre.`);
+    }
+    const r = await api('/plantillas-indicaciones', { method: 'POST', json: { titulo: t, texto: texto.trim() } });
+    if (!r.ok) return setErrorTitulo(mensaje(r));
+    setNombrando(false); setTitulo(''); setErrorTitulo(null); cargarPlantillas();
   };
-  const borrarPlantilla = async (id: number) => { await api(`/plantillas-indicaciones/${id}`, { method: 'DELETE' }); cargarPlantillas(); };
+  const borrarPlantilla = async () => {
+    const p = aBorrar!; setABorrar(null);
+    const r = await api(`/plantillas-indicaciones/${p.id}`, { method: 'DELETE' });
+    if (!r.ok) setEstado({ error: mensaje(r, 'No se pudo borrar la plantilla. Intentá de nuevo.') });
+    cargarPlantillas();
+  };
 
   return (
     <View style={{ backgroundColor: COLOR.tarjeta, borderRadius: 24, padding: 16, marginTop: 12, borderWidth: 1.5, borderColor: COLOR.dorado }}>
@@ -209,7 +221,7 @@ export function Recomendaciones({ seguimientoId, inicial }: { seguimientoId: num
                 style={{ paddingLeft: 12, paddingRight: 6, minHeight: 36, justifyContent: 'center' }}>
                 <Text style={{ fontFamily: FUENTE.textoFuerte, fontSize: 13, color: COLOR.primario }}>+ {p.titulo}</Text>
               </TouchableOpacity>
-              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Borrar plantilla ${p.titulo}`} onPress={() => borrarPlantilla(p.id)}
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Borrar plantilla ${p.titulo}`} onPress={() => setABorrar(p)}
                 style={{ paddingRight: 10, paddingLeft: 4, minHeight: 36, justifyContent: 'center' }}>
                 <Ionicons name="close" size={14} color={COLOR.textoSuave} />
               </TouchableOpacity>
@@ -225,13 +237,17 @@ export function Recomendaciones({ seguimientoId, inicial }: { seguimientoId: num
         variante="secundario" cargando={estado.cargando} deshabilitado={texto === guardado} onPress={guardar} estilo={{ marginTop: 10 }} />
       {nombrando ? (
         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8, alignItems: 'center' }}>
-          <TextInput value={titulo} onChangeText={setTitulo} maxLength={60} placeholder="Nombre de la plantilla" placeholderTextColor="#8A968F"
-            accessibilityLabel="Nombre de la plantilla" style={[estilos.input, { flex: 1 }]} />
+          <TextInput value={titulo} onChangeText={(t) => { setTitulo(t); setErrorTitulo(null); }} maxLength={60} placeholder="Nombre de la plantilla" placeholderTextColor="#8A968F"
+            accessibilityLabel="Nombre de la plantilla" style={[estilos.input, { flex: 1 }, errorTitulo ? { borderColor: COLOR.error } : null]} />
           <Boton texto="Guardar" variante="texto" deshabilitado={!titulo.trim()} onPress={guardarPlantilla} />
         </View>
       ) : (
         <Boton texto="Guardar este texto como plantilla" icono="bookmark-outline" variante="texto" deshabilitado={!texto.trim()} onPress={() => setNombrando(true)} />
       )}
+      {nombrando && errorTitulo && <Text style={estilos.error}>{errorTitulo}</Text>}
+      <Confirmar visible={!!aBorrar} peligro titulo="¿Borrar la plantilla?"
+        mensaje={`La plantilla «${aBorrar?.titulo ?? ''}» dejará de aparecer en tu lista. Las indicaciones ya guardadas en los informes no cambian.`}
+        textoConfirmar="Sí, borrar" onConfirmar={borrarPlantilla} onCancelar={() => setABorrar(null)} />
     </View>
   );
 }

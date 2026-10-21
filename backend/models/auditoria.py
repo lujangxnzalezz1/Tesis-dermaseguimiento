@@ -13,7 +13,7 @@ class Auditoria(Base):
     id = Column(Integer, primary_key=True)
     fecha = Column(DateTime, nullable=False, default=ahora, index=True)  # reloj del servidor
     usuario_id = Column(Integer, nullable=True, index=True)
-    usuario_email = Column(String, nullable=True)
+    usuario_email = Column(String, nullable=True, index=True)  # filtro de la pantalla de auditoría
     ip = Column(String, nullable=True)
     modulo = Column(String, nullable=False, index=True)
     accion = Column(String, nullable=False, index=True)
