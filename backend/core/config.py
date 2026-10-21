@@ -168,6 +168,13 @@ class Settings(BaseSettings):
     def avisos_dias(self) -> list[int]:
         return sorted({int(x) for x in self.AVISOS_DIAS_ANTES.split(",") if x.strip()}, reverse=True)
 
+    # --- pagos y planes (wa) ---
+    ADAMSPAY_TIMEOUT_SEGUNDOS: int = 15       # espera máxima de cada llamada al API de AdamsPay
+    ADAMSPAY_VIGENCIA_HORAS: int = 24         # validez de la deuda: pasado este plazo ya no se puede pagar
+    EMISOR_LOGO_RUTA: str = ""                # imagen (PNG/JPG) del logo del emisor en el recibo; vacío = sin logo
+    COMPROBANTE_ENLACE_MINUTOS: int = 5       # validez del enlace de descarga del recibo (app nativa)
+    # --- fin pagos y planes (wa) ---
+
 
 settings = Settings()
 

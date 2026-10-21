@@ -232,7 +232,8 @@ def test_comprobante_pdf_y_reimpresion(client, doc, doc2, db):
     r = client.get(f"/comprobantes/{cid}/pdf", headers=doc)
     assert r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["content-type"] == "application/pdf"
     client.get(f"/comprobantes/{cid}/pdf", headers=doc)
-    assert client.get(f"/comprobantes/{cid}", headers=doc).json()["estado"] == "reimpreso"
+    comp = client.get(f"/comprobantes/{cid}", headers=doc).json()
+    assert comp["estado"] == "emitido" and comp["reimpresiones"] == 2 and comp["reimpreso_en"]  # la reimpresión no pisa el estado
     assert client.get(f"/comprobantes/{cid}", headers=doc2).status_code == 404
     assert client.get(f"/comprobantes/{cid}/pdf", headers=doc2).status_code == 404
 

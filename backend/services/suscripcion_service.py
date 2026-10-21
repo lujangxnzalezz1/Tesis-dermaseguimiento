@@ -1,4 +1,5 @@
 """Reglas de negocio de suscripciones, pagos, comprobantes y avisos (puntos 9 a 15)."""
+import logging
 from datetime import timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Optional
@@ -9,14 +10,16 @@ from sqlalchemy.orm import Session
 from core.config import settings
 from core.tiempo import ahora
 from models.suscripcion import (
-    EST_ACTIVA, EST_CANCELADA, EST_PRUEBA, EST_VENCIDA, PAGO_APROBADO, PAGO_PENDIENTE,
-    Comprobante, HistorialSuscripcion, Notificacion, Pago, Plan, Suscripcion,
+    COMP_ANULADO, EST_ACTIVA, EST_CANCELADA, EST_PRUEBA, EST_VENCIDA, PAGO_APROBADO, PAGO_CANCELADO, PAGO_PENDIENTE,
+    PAGO_VENCIDO, Comprobante, HistorialSuscripcion, Notificacion, Pago, Plan, Suscripcion,
 )
 from models.usuario import Usuario
+from services import auditoria_service as audit
 from services import email_service, push_service
 from services.letras import formato_monto, monto_en_letras
 from services.pasarela import ErrorPasarela, obtener_pasarela
 
+log = logging.getLogger("pagos")
 CENT = Decimal("0.01")
 ESTADOS_CON_ACCESO = (EST_PRUEBA, EST_ACTIVA, EST_CANCELADA)  # 'cancelada' conserva acceso hasta el vencimiento
 
@@ -68,7 +71,9 @@ def asegurar_suscripcion(db: Session, usuario: Usuario) -> Suscripcion:
 
 
 def sincronizar(db: Session, susc: Suscripcion) -> Suscripcion:
-    """Aplica el vencimiento (RF-20): pasa a 'vencida' y aplica bajas programadas al plan gratuito."""
+    """Aplica el vencimiento (RF-20): pasa a 'vencida' y aplica las bajas de plan programadas.
+    Baja al gratuito: queda activa sin vencimiento. Baja a otro plan pago (p. ej. anual → mensual):
+    se cambia el plan y la suscripción queda 'vencida' hasta que se pague el nuevo período."""
     if susc.estado in ESTADOS_CON_ACCESO and susc.fecha_vencimiento and susc.fecha_vencimiento <= ahora():
         anterior = susc.plan_id
         siguiente = db.get(Plan, susc.plan_siguiente_id) if susc.plan_siguiente_id else None
@@ -76,6 +81,12 @@ def sincronizar(db: Session, susc: Suscripcion) -> Suscripcion:
             susc.plan_id, susc.plan_siguiente_id = siguiente.id, None
             susc.estado, susc.fecha_vencimiento, susc.es_prueba = EST_ACTIVA, None, False
             _historial(db, susc, "cambio_plan", anterior, siguiente.id, "Baja de plan programada aplicada")
+        elif siguiente is not None and susc.estado != EST_CANCELADA:
+            susc.plan_id, susc.plan_siguiente_id = siguiente.id, None
+            susc.estado, susc.es_prueba = EST_VENCIDA, False
+            _historial(db, susc, "cambio_plan", anterior, siguiente.id,
+                       "Baja de plan programada aplicada: el nuevo plan queda pendiente de pago")
+            _historial(db, susc, "vencimiento", anterior, None, "La suscripción venció")
         else:
             susc.estado = EST_VENCIDA
             _historial(db, susc, "vencimiento", anterior, None, "La suscripción venció")
@@ -147,7 +158,39 @@ def calcular_cobro(db: Session, susc: Suscripcion, nuevo: Plan) -> dict:
     return {"accion": "cobrar", "tipo": "cambio_plan", "monto": monto, "credito": credito}
 
 
-def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> dict:
+def cotizar(db: Session, usuario: Usuario, plan_codigo: str) -> dict:
+    """Lo que costaría elegir el plan (sin crear ningún pago): la app lo muestra antes de ir a la pasarela."""
+    susc = asegurar_suscripcion(db, usuario)
+    nuevo = plan_por_codigo(db, plan_codigo)
+    calculo = calcular_cobro(db, susc, nuevo)
+    moneda = nuevo.moneda
+    precio = _dinero(nuevo.precio, moneda)
+    return {
+        "accion": calculo["accion"], "tipo": calculo["tipo"], "plan": nuevo.codigo, "plan_nombre": nuevo.nombre,
+        "moneda": moneda, "precio": str(precio), "credito": str(_dinero(calculo["credito"], moneda)),
+        "monto": str(_dinero(calculo["monto"], moneda)), "iva_incluido": str(iva_incluido(calculo["monto"], moneda)),
+    }
+
+
+def iva_incluido(total, moneda: str = "PYG") -> Decimal:
+    """IVA 10 % contenido en un precio con IVA incluido (Paraguay): total / 11."""
+    return _dinero(Decimal(str(total)) / Decimal(11), moneda)
+
+
+def _pagos_pendientes_vigentes(db: Session, susc: Suscripcion, plan: Plan) -> int:
+    """Pagos pendientes que bloquean un nuevo checkout. Antes se consulta a la pasarela: una deuda
+    vencida o cancelada en AdamsPay deja de bloquear (si no hay conexión, se sigue bloqueando)."""
+    pendientes = db.query(Pago).filter(Pago.suscripcion_id == susc.id, Pago.estado == PAGO_PENDIENTE, Pago.plan_id == plan.id).all()
+    for pago in pendientes:
+        try:
+            verificar_pago_externo(db, pago)
+        except HTTPException:
+            pass
+    return db.query(Pago).filter(Pago.suscripcion_id == susc.id, Pago.estado == PAGO_PENDIENTE, Pago.plan_id == plan.id).count()
+
+
+def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str,
+                          documento: Optional[str] = None, telefono: Optional[str] = None) -> dict:
     susc = asegurar_suscripcion(db, usuario)
     nuevo = plan_por_codigo(db, plan_codigo)
     calculo = calcular_cobro(db, susc, nuevo)
@@ -164,14 +207,15 @@ def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> di
             f"Listo: pasarás al plan «{nuevo.nombre}» cuando termine tu período actual. Hasta entonces conservás tus funciones. "
             "No se realizan reembolsos por bajas de plan.")}
 
-    if db.query(Pago).filter(Pago.suscripcion_id == susc.id, Pago.estado == PAGO_PENDIENTE, Pago.plan_id == nuevo.id).count():
+    if _pagos_pendientes_vigentes(db, susc, nuevo):
         raise HTTPException(409, "Ya tenés un pago pendiente para este plan. Terminá ese pago o esperá unos minutos antes de iniciar otro.")
 
     if calculo["monto"] == 0:
         # El crédito cubre todo el importe: se aplica sin pasar por la pasarela
         pago = Pago(usuario_id=usuario.id, suscripcion_id=susc.id, plan_id=nuevo.id, tipo=calculo["tipo"], monto=Decimal("0.00"),
                     moneda=nuevo.moneda, estado=PAGO_APROBADO, proveedor="credito",
-                    referencia_externa=f"CRD-{susc.id}-{int(ahora().timestamp())}", forma_pago="Crédito por tiempo no usado")
+                    referencia_externa=f"CRD-{susc.id}-{int(ahora().timestamp())}", forma_pago="Crédito por tiempo no usado",
+                    credito=calculo["credito"], pagador_documento=documento, pagador_telefono=telefono)
         db.add(pago)
         db.flush()
         aplicar_pago_aprobado(db, pago)
@@ -183,7 +227,8 @@ def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> di
     except ErrorPasarela:
         raise HTTPException(502, "No pudimos conectar con la pasarela de pagos. Intentá de nuevo en unos minutos; no se realizó ningún cobro.")
     pago = Pago(usuario_id=usuario.id, suscripcion_id=susc.id, plan_id=nuevo.id, tipo=calculo["tipo"], monto=calculo["monto"],
-                moneda=nuevo.moneda, estado=PAGO_PENDIENTE, proveedor=pasarela.nombre, referencia_externa=referencia)
+                moneda=nuevo.moneda, estado=PAGO_PENDIENTE, proveedor=pasarela.nombre, referencia_externa=referencia,
+                credito=calculo["credito"], pagador_documento=documento, pagador_telefono=telefono)
     db.add(pago)
     db.commit()
     return {
@@ -195,9 +240,14 @@ def iniciar_cambio_o_pago(db: Session, usuario: Usuario, plan_codigo: str) -> di
 
 # --------------------------------------------------------------------------- pago aprobado
 
+ERROR_CONSULTA = ("No pudimos consultar el estado de tu pago con la pasarela. Tu pago sigue pendiente y no se "
+                  "cobró dos veces; volvé a intentar en unos minutos.")
+
+
 def verificar_pago_externo(db: Session, pago: Pago) -> Pago:
-    """Para pasarelas que se consultan (AdamsPay): si la deuda figura pagada y el monto coincide,
-    aprueba el pago una sola vez. Un fallo de conexión deja el pago pendiente."""
+    """Para pasarelas que se consultan (AdamsPay). Pagada y con el monto correcto → aprueba el pago una
+    sola vez; cancelada o vencida → cierra el pago local (así se puede iniciar otro checkout); en otro
+    caso sigue pendiente. Si no hay conexión con la pasarela responde 503 sin tocar el pago."""
     if pago.estado != PAGO_PENDIENTE or pago.proveedor != "adamspay":
         return pago
     pasarela = obtener_pasarela()
@@ -205,20 +255,37 @@ def verificar_pago_externo(db: Session, pago: Pago) -> Pago:
         return pago
     try:
         estado = pasarela.consultar(pago.referencia_externa)
-    except (ErrorPasarela, KeyError, TypeError):
-        return pago
-    if not estado["pagado"]:
+    except ErrorPasarela as e:
+        log.warning("No se pudo consultar el pago %s: %s", pago.id, e)
+        raise HTTPException(503, ERROR_CONSULTA)
+    if estado["estado"] == PAGO_PENDIENTE:
         return pago
     pago = db.query(Pago).filter(Pago.id == pago.id).with_for_update().first()
     if pago.estado != PAGO_PENDIENTE:
+        return pago  # otra consulta simultánea ya lo resolvió
+    referencia = {"referencia": pago.referencia_externa, "monto": str(pago.monto), "transaccion": estado.get("transaccion_id")}
+
+    if estado["estado"] in (PAGO_CANCELADO, PAGO_VENCIDO):
+        pago.estado = estado["estado"]
+        pago.actualizado_en = ahora()
+        db.commit()
+        audit.registrar(db, None, None, "pagos", f"pago_{pago.estado}", entidad="pago", entidad_id=pago.id,
+                        usuario_id=pago.usuario_id, despues=referencia, detalle="informado por AdamsPay al consultar la deuda")
         return pago
+
     if estado["monto"] != Decimal(pago.monto) or estado["moneda"] != pago.moneda:
-        return pago  # no se aprueba un pago cuyo monto no coincide
+        # No se aprueba un pago cuyo monto no coincide: queda pendiente para revisión manual
+        audit.registrar(db, None, None, "pagos", "verificar_pago", entidad="pago", entidad_id=pago.id, usuario_id=pago.usuario_id,
+                        resultado="fallo", detalle=f"AdamsPay informó {estado['monto']} {estado['moneda']}; se esperaba {pago.monto} {pago.moneda}")
+        return pago
     pago.estado = PAGO_APROBADO
-    pago.forma_pago = "AdamsPay"
+    pago.forma_pago = f"AdamsPay — {estado['forma_pago']}" if estado.get("forma_pago") else "AdamsPay"
+    pago.transaccion_id = estado.get("transaccion_id")
     pago.actualizado_en = ahora()
     db.flush()
     aplicar_pago_aprobado(db, pago)
+    audit.registrar(db, None, None, "pagos", "pago_aprobado", entidad="pago", entidad_id=pago.id, usuario_id=pago.usuario_id,
+                    despues=referencia, detalle="confirmado consultando a AdamsPay")
     return pago
 
 
@@ -253,18 +320,7 @@ def aplicar_pago_aprobado(db: Session, pago: Pago) -> Comprobante:
     periodo = None
     if susc.fecha_vencimiento:
         periodo = f"{inicio.date().isoformat()} al {susc.fecha_vencimiento.date().isoformat()}"
-    comp = Comprobante(
-        numero=f"TMP-{pago.id}-{int(ahora_.timestamp() * 1000)}", pago_id=pago.id, usuario_id=usuario.id, fecha_emision=ahora_,
-        emisor_nombre=settings.EMISOR_NOMBRE, emisor_ruc=settings.EMISOR_RUC or None, emisor_email=settings.EMISOR_EMAIL,
-        pagador_nombre=usuario.nombre, pagador_email=usuario.email, concepto=f"Suscripción {plan.nombre}",
-        referencia=pago.referencia_externa, periodo=periodo, monto=pago.monto, moneda=pago.moneda,
-        monto_letras=monto_en_letras(pago.monto, pago.moneda), forma_pago=pago.forma_pago or "No informada",
-        leyenda=(f"Este recibo electrónico acredita únicamente la recepción del importe indicado y ha sido generado "
-                 f"por el Sistema {settings.EMISOR_NOMBRE}. No constituye factura legal."),
-    )
-    db.add(comp)
-    db.flush()
-    comp.numero = f"REC-{comp.id:06d}"  # autonumerado por la clave primaria: no puede repetirse
+    comp = _emitir_comprobante(db, pago, usuario, f"Suscripción {plan.nombre}", periodo)
     hasta = f" hasta el {susc.fecha_vencimiento.date().isoformat()}." if susc.fecha_vencimiento else "."
     mensaje = f"Recibimos tu pago de {formato_monto(pago.monto, pago.moneda)}. Tu plan «{plan.nombre}» está activo{hasta}"
     _crear_notificacion(db, usuario, f"pago:{pago.id}", "pago", mensaje)
@@ -272,6 +328,68 @@ def aplicar_pago_aprobado(db: Session, pago: Pago) -> Comprobante:
     email_service.enviar(db, usuario.email, "pago_aprobado", {"nombre": usuario.nombre, "mensaje": mensaje, "numero": comp.numero})
     push_service.enviar(usuario.id, "Pago recibido", mensaje)
     return comp
+
+
+# --------------------------------------------------------------------------- comprobantes
+
+LEYENDA = ("Este recibo electrónico acredita únicamente la recepción del importe indicado y ha sido generado "
+           "por el Sistema {emisor}. No constituye factura legal.")
+
+
+def _emitir_comprobante(db: Session, pago: Pago, usuario: Usuario, concepto: str, periodo: Optional[str]) -> Comprobante:
+    ahora_ = ahora()
+    credito = _dinero(pago.credito or 0, pago.moneda)
+    comp = Comprobante(
+        numero=f"TMP-{pago.id}-{int(ahora_.timestamp() * 1000)}", pago_id=pago.id, usuario_id=usuario.id, fecha_emision=ahora_,
+        emisor_nombre=settings.EMISOR_NOMBRE, emisor_ruc=settings.EMISOR_RUC or None, emisor_email=settings.EMISOR_EMAIL,
+        pagador_nombre=usuario.nombre, pagador_email=usuario.email,
+        pagador_documento=pago.pagador_documento, pagador_telefono=pago.pagador_telefono, concepto=concepto,
+        referencia=pago.referencia_externa, periodo=periodo, monto=pago.monto, moneda=pago.moneda,
+        subtotal=_dinero(pago.monto, pago.moneda) + credito, credito=credito, iva=iva_incluido(pago.monto, pago.moneda),
+        monto_letras=monto_en_letras(pago.monto, pago.moneda), forma_pago=pago.forma_pago or "No informada",
+        leyenda=LEYENDA.format(emisor=settings.EMISOR_NOMBRE),
+    )
+    db.add(comp)
+    db.flush()
+    comp.numero = f"REC-{comp.id:06d}"  # autonumerado por la clave primaria: no puede repetirse
+    return comp
+
+
+def comprobante_vigente(db: Session, pago_id: int) -> Optional[Comprobante]:
+    """El comprobante no anulado del pago (o el último anulado, si no se emitió otro)."""
+    filas = db.query(Comprobante).filter(Comprobante.pago_id == pago_id).order_by(Comprobante.id.desc()).all()
+    return next((c for c in filas if c.estado != COMP_ANULADO), filas[0] if filas else None)
+
+
+def reemitir_comprobante(db: Session, comprobante_id: int) -> Comprobante:
+    """Tras anular un comprobante se emite OTRO (número nuevo) para el mismo pago. El anulado no se toca."""
+    anulado = db.get(Comprobante, comprobante_id)
+    if not anulado:
+        raise HTTPException(404, "No encontramos ese comprobante.")
+    if anulado.estado != COMP_ANULADO:
+        raise HTTPException(409, "Solo se puede emitir un comprobante nuevo cuando el anterior está anulado. Anulalo primero.")
+    pago = db.get(Pago, anulado.pago_id)
+    if pago is None or pago.estado != PAGO_APROBADO:
+        raise HTTPException(409, "El pago de ese comprobante no está aprobado: no corresponde emitir un recibo.")
+    if db.query(Comprobante).filter(Comprobante.pago_id == pago.id, Comprobante.estado != COMP_ANULADO).count():
+        raise HTTPException(409, "Ese pago ya tiene un comprobante vigente.")
+    usuario = db.get(Usuario, pago.usuario_id)
+    comp = _emitir_comprobante(db, pago, usuario, anulado.concepto, anulado.periodo)
+    db.commit()
+    return comp
+
+
+def registrar_impresion(db: Session, comp: Comprobante) -> bool:
+    """Cuenta las impresiones sin cambiar el estado (sigue «emitido») y devuelve True si es una
+    reimpresión. Un comprobante anulado se puede descargar con la marca ANULADO, pero no se modifica."""
+    if comp.estado == COMP_ANULADO:
+        return (comp.reimpresiones or 0) > 0
+    comp.reimpresiones = (comp.reimpresiones or 0) + 1
+    reimpreso = comp.reimpresiones > 1
+    if reimpreso:
+        comp.reimpreso_en = ahora()
+    db.commit()
+    return reimpreso
 
 
 # --------------------------------------------------------------------------- cancelación
