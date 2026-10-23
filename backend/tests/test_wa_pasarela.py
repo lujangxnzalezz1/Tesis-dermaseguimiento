@@ -136,11 +136,13 @@ def _checkout(client, h, plan="premium_mensual"):
 def test_adamspay_pagado_aprueba_activa_y_audita(client, doc, db, adamspay):
     info = _checkout(client, doc).json()
     assert client.get(f"/pagos/{info['pago_id']}", headers=doc).json()["estado"] == "pendiente"
-    adamspay["deuda"] = _deuda("paid", "success", payStatus={"status": "paid", "txId": "TX-998", "payMethod": "Tarjeta de débito"})
+    adamspay["deuda"] = _deuda("paid", "success", refs={"txList": [
+        {"txId": "TX-997", "type": "debtDocPay", "objStatus": {"status": "failed"}, "method": "card"},
+        {"txId": "TX-998", "type": "debtDocPay", "objStatus": {"status": "success"}, "method": "card"}]})
     r = client.get(f"/pagos/{info['pago_id']}", headers=doc).json()
     assert r["estado"] == "aprobado" and r["comprobante_id"]
     pago = db.get(Pago, info["pago_id"])
-    assert pago.transaccion_id == "TX-998" and pago.forma_pago == "AdamsPay — Tarjeta de débito"
+    assert pago.transaccion_id == "TX-998" and pago.forma_pago == "AdamsPay — Tarjeta de crédito/débito"
     assert client.get("/suscripcion", headers=doc).json()["estado"] == "activa"
     aud = db.query(Auditoria).filter(Auditoria.accion == "pago_aprobado", Auditoria.entidad_id == str(pago.id)).one()
     assert aud.usuario_id == pago.usuario_id and "AdamsPay" in aud.detalle

@@ -75,13 +75,6 @@ def _fecha_utc(valor) -> Optional[datetime]:
     return fecha if fecha.tzinfo else fecha.replace(tzinfo=timezone.utc)
 
 
-def _primero(datos: dict, *claves):
-    for clave in claves:
-        if isinstance(datos, dict) and datos.get(clave):
-            return str(datos[clave])
-    return None
-
-
 def estado_de_deuda(d: dict) -> str:
     """Traduce una deuda de AdamsPay a los estados del Pago: pagada → aprobado; cancelada/anulada →
     cancelado; expirada o fuera del período de validez → vencido; cualquier otro caso → pendiente."""
@@ -95,6 +88,25 @@ def estado_de_deuda(d: dict) -> str:
     if objeto in ADAMSPAY_VENCIDA or (fin is not None and fin <= datetime.now(timezone.utc)):
         return PAGO_VENCIDO
     return PAGO_PENDIENTE
+
+
+# Medios de pago que informa AdamsPay en refs.txList[].method
+_METODOS = {"simulator": "Simulador de AdamsPay (pruebas)", "card": "Tarjeta de crédito/débito", "qr": "Código QR",
+            "wallet": "Billetera electrónica", "bank": "Transferencia bancaria"}
+
+
+def _transaccion_pagada(d: dict) -> dict:
+    """Transacción de pago de la deuda (refs.txList, tipo debtDocPay): la última exitosa, o {} si no hay."""
+    txs = [t for t in ((d.get("refs") or {}).get("txList") or []) if isinstance(t, dict)]
+    exitosas = [t for t in txs if t.get("type") == "debtDocPay" and ((t.get("objStatus") or {}).get("status") == "success")]
+    return (exitosas or [{}])[-1]
+
+
+def _forma_pago(tx: dict) -> Optional[str]:
+    metodo = (tx.get("method") or "").lower()
+    if not metodo:
+        return None
+    return _METODOS.get(metodo, metodo)
 
 
 class PasarelaAdamsPay:
@@ -141,11 +153,11 @@ class PasarelaAdamsPay:
             monto, moneda = Decimal(str(d["amount"]["value"])), d["amount"]["currency"]
         except (KeyError, TypeError, ArithmeticError):
             raise ErrorPasarela(f"Respuesta inesperada de AdamsPay: {str(r)[:300]}")
-        pago = d.get("payStatus") or {}
+        tx = _transaccion_pagada(d)
         return {
             "estado": estado, "pagado": estado == PAGO_APROBADO, "monto": monto, "moneda": moneda,
-            "transaccion_id": _primero(pago, "txId", "transactionId", "id") or _primero(d, "txId", "transactionId"),
-            "forma_pago": _primero(pago, "payMethod", "method", "channel") or _primero(d, "payMethod", "paymentMethod"),
+            "transaccion_id": str(tx["txId"]) if tx.get("txId") else None,
+            "forma_pago": _forma_pago(tx),
         }
 
 

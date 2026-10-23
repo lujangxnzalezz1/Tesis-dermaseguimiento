@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     CAPTCHA_SITE_KEY: str = ""        # clave pública: la app la obtiene de GET /config-publica
     CAPTCHA_VERIFY_URL: str = ""      # vacío = la URL oficial del proveedor elegido
     CAPTCHA_PUNTAJE_MINIMO: float = 0.5  # solo reCAPTCHA v3 (que devuelve un puntaje de 0 a 1)
-    # La app nativa no tiene widget de CAPTCHA (no se instaló react-native-webview). Con true, el servidor
+    # La app nativa muestra el CAPTCHA en una vista web (react-native-webview). Con true, el servidor
     # acepta sin CAPTCHA las solicitudes que llegan con la cabecera «X-Cliente: app-nativa». La cabecera
     # se puede falsificar: activarlo deja como protección solo el límite de frecuencia y el bloqueo de cuenta.
     CAPTCHA_EXIMIR_APP_NATIVA: bool = False

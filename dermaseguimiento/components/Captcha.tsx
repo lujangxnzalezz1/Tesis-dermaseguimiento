@@ -1,25 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform, Text, View } from 'react-native';
 import { api } from '../lib/api';
+import { CaptchaNativo } from './CaptchaNativo';
+import { SCRIPTS, type ConfigCaptcha, type Proveedor } from '../lib/captcha';
 import { COLOR, FUENTE } from './ui';
+
+export type { ConfigCaptcha };
 
 /** Verificación anti-robots (CAPTCHA). El servidor indica en GET /config-publica si está activa, el
  *  proveedor (Cloudflare Turnstile, hCaptcha o reCAPTCHA) y la clave pública.
  *
  *  - Web: se inserta el script del proveedor y se dibuja su widget.
- *  - App nativa: no se muestra nada. Dibujar el widget requiere react-native-webview, que no está
- *    instalado; el servidor solo acepta solicitudes nativas sin CAPTCHA si CAPTCHA_EXIMIR_APP_NATIVA=true
- *    (la app envía la cabecera X-Cliente: app-nativa). Si no, la app nativa no podrá ingresar con el
- *    CAPTCHA activo y se avisa al usuario. */
-
-type Proveedor = 'turnstile' | 'hcaptcha' | 'recaptcha';
-export type ConfigCaptcha = { activo: boolean; proveedor: Proveedor; site_key: string; eximir_app_nativa: boolean };
-
-const SCRIPTS: Record<Proveedor, { url: string; global: string }> = {
-  turnstile: { url: 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit', global: 'turnstile' },
-  hcaptcha: { url: 'https://js.hcaptcha.com/1/api.js?render=explicit', global: 'hcaptcha' },
-  recaptcha: { url: 'https://www.google.com/recaptcha/api.js?render=explicit', global: 'grecaptcha' },
-};
+ *  - App nativa: el widget se dibuja en una vista web (CaptchaNativo.native.tsx, react-native-webview).
+ *    Si el servidor tiene CAPTCHA_EXIMIR_APP_NATIVA=true no se muestra (la app envía X-Cliente: app-nativa). */
 
 let configCache: Promise<ConfigCaptcha | null> | null = null;
 
@@ -91,9 +84,9 @@ export function Captcha({ onToken }: { onToken: (token: string | null) => void }
   if (!config?.activo) return null;
   if (Platform.OS !== 'web') {
     return config.eximir_app_nativa ? null : (
-      <Text style={{ fontFamily: FUENTE.texto, fontSize: 13, color: COLOR.aviso, marginVertical: 8 }}>
-        La verificación de seguridad todavía no está disponible en la app. Si no podés continuar, usá la versión web.
-      </Text>
+      <View style={{ marginVertical: 8 }}>
+        <CaptchaNativo config={config} onToken={onToken} />
+      </View>
     );
   }
   return (
@@ -116,7 +109,7 @@ export function useCaptcha() {
   const [requerido, setRequerido] = useState(false);
 
   useEffect(() => {
-    cargarConfigCaptcha().then((c) => setRequerido(!!c?.activo && Platform.OS === 'web'));
+    cargarConfigCaptcha().then((c) => setRequerido(!!c?.activo && (Platform.OS === 'web' || !c.eximir_app_nativa)));
   }, []);
 
   const alCambiar = useCallback((t: string | null) => setToken(t), []);

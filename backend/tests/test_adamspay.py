@@ -1,6 +1,7 @@
 """Pasarela AdamsPay: crear la deuda y aprobar el pago solo cuando AdamsPay la informa pagada con el monto correcto."""
 import io
 import json
+from pathlib import Path
 from decimal import Decimal
 
 from core.config import settings
@@ -50,3 +51,14 @@ def test_sin_conexion_lanza_error_controlado(monkeypatch):
         assert False, "debía fallar"
     except pas.ErrorPasarela:
         pass
+
+
+def test_respuesta_real_de_staging(monkeypatch):
+    """Respuesta de GET /debts/{docId} obtenida del ambiente de pruebas de AdamsPay (pago con su simulador)."""
+    real = json.loads((Path(__file__).parent / "datos" / "adamspay_deuda_pagada.json").read_text())
+    monkeypatch.setattr(pas.PasarelaAdamsPay, "_llamar", lambda self, m, r, c=None: real)
+    estado = pas.PasarelaAdamsPay().consultar("DS-39D8F93DD20841F8A274")
+    assert estado["estado"] == "aprobado" and estado["pagado"] is True
+    assert estado["monto"] == 149000 and estado["moneda"] == "PYG"
+    assert estado["transaccion_id"] == "4408082008366"
+    assert estado["forma_pago"] == "Simulador de AdamsPay (pruebas)"

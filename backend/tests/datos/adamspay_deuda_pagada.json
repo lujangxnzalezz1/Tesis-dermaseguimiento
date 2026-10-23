@@ -1,0 +1,22 @@
+{
+ "meta": {"status": "success", "site": "live/test/v1", "now": "2026-10-23T21:48:02+00:00"},
+ "debt": {
+  "docId": "DS-39D8F93DD20841F8A274",
+  "label": "Suscripción Premium mensual",
+  "amount": {"currency": "PYG", "value": "149000.000000", "paid": "149000.000000"},
+  "validPeriod": {"start": "2026-10-11T00:47:57+00:00", "end": "2026-10-12T00:47:57+00:00"},
+  "payStatus": {"status": "paid", "code": null, "time": "2026-10-11T00:48:26+00:00", "text": null},
+  "objStatus": {"status": "success", "code": null, "time": "2026-10-11T00:48:26+00:00", "text": null},
+  "refs": {
+   "txList": [{
+     "txId": "4408082008366", "type": "debtDocPay",
+     "objStatus": {"status": "success", "code": null, "time": "2026-10-11T00:48:26+00:00", "text": "This is a simulated response"},
+     "provider": "adams", "method": "simulator", "material": "generic",
+     "origAmount": {"currency": "PYG", "value": "149000.000000"},
+     "realAmount": {"currency": "PYG", "value": "149000.000000"},
+     "finalized": "2026-10-11T00:48:26+00:00"
+   }],
+   "wires": []
+  }
+ }
+}
