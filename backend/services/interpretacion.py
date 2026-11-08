@@ -2,7 +2,7 @@
 
 Solo describe cambios observables entre dos fotografías; NO interpreta clínicamente ni diagnostica.
 Los umbrales de magnitud provienen de la percepción del color (CIE76: ~2,3 = diferencia mínima
-perceptible, Sharma 2003) y son configurables; no están validados clínicamente.
+perceptible, Sharma & Trussell 1997) y son configurables; no están validados clínicamente.
 """
 import json
 

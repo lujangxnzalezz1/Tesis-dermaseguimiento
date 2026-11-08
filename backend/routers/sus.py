@@ -15,10 +15,17 @@ from services import auditoria_service as audit
 router = APIRouter(tags=["Usabilidad (SUS)"])
 
 
-def calcular_sus(respuestas: list[int]) -> int:
-    """Puntaje SUS estándar: ítems impares (resp-1), pares (5-resp), suma x 2,5."""
+def calcular_sus(respuestas: list[int]) -> float:
+    """Puntaje SUS estándar: ítems impares (resp-1), pares (5-resp), suma x 2,5.
+    Se devuelve exacto (puede terminar en ,5): redondearlo haría que un 67,5 pasara el umbral de 68."""
     total = sum((r - 1) if i % 2 == 0 else (5 - r) for i, r in enumerate(respuestas))
-    return round(total * 2.5)
+    return total * 2.5
+
+
+def puntaje_guardado(respuestas: str) -> float:
+    """Recalcula el puntaje exacto desde las respuestas guardadas («5,1,4,...»).
+    La columna `puntaje` es entera y conserva el valor redondeado solo por compatibilidad."""
+    return calcular_sus([int(r) for r in respuestas.split(",")])
 
 
 class EntradaSUS(BaseModel):
@@ -41,7 +48,7 @@ class EntradaSUS(BaseModel):
 @router.post("/sus", status_code=201)
 def registrar_sus(datos: EntradaSUS, request: Request, db: Session = Depends(get_db), usuario: Usuario = Depends(obtener_usuario_actual)):
     puntaje = calcular_sus(datos.respuestas)
-    db.add(RespuestaSUS(usuario_id=usuario.id, respuestas=",".join(map(str, datos.respuestas)), puntaje=puntaje, comentario=datos.comentario))
+    db.add(RespuestaSUS(usuario_id=usuario.id, respuestas=",".join(map(str, datos.respuestas)), puntaje=round(puntaje), comentario=datos.comentario))
     db.commit()
     audit.registrar(db, request, usuario, "usabilidad", "registrar_sus", despues={"puntaje": puntaje})
     return {"puntaje": puntaje, "mensaje": "¡Gracias por completar el cuestionario!"}

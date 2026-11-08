@@ -220,3 +220,13 @@ def test_calculo_y_registro_sus(client, doc, admin):
     assert client.post("/sus", json={"respuestas": [3] * 9}, headers=doc).status_code == 422
     r = client.get("/admin/sus", headers=admin).json()
     assert r["respuestas"] == 2 and r["puntaje_promedio"] == 87.5 and r["cumple_objetivo_68"] is True
+
+
+def test_sus_no_redondea_hacia_el_umbral(client, doc, admin):
+    """Un 67,5 no debe convertirse en 68 y aprobar el umbral de usabilidad (RNF-11)."""
+    from routers.sus import calcular_sus
+    respuestas = [4, 2, 4, 2, 4, 2, 4, 2, 1, 2]
+    assert calcular_sus(respuestas) == 67.5
+    assert client.post("/sus", json={"respuestas": respuestas}, headers=doc).json()["puntaje"] == 67.5
+    r = client.get("/admin/sus", headers=admin).json()
+    assert r["puntaje_promedio"] == 67.5 and r["cumple_objetivo_68"] is False and r["detalle"][0]["puntaje"] == 67.5

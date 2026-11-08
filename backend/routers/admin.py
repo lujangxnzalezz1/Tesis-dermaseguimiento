@@ -19,6 +19,7 @@ from models.suscripcion import (
 )
 from models.usuario import ROL_ADMIN, ROLES, Usuario
 from routers import pacientes as pacientes_router
+from routers.sus import puntaje_guardado
 from schemas.comunes import limpiar_texto
 from schemas.paciente import PacienteReactivar
 from schemas.usuario import CambioEstadoUsuario, UsuarioAdminRespuesta
@@ -410,7 +411,8 @@ def guardar_plantilla(codigo: str, datos: PlantillaEntrada, request: Request, db
 @router.get("/sus")
 def resumen_sus(db: Session = Depends(get_db), _: Usuario = Depends(solo_admin)):
     filas = db.query(RespuestaSUS).all()
-    puntajes = [f.puntaje for f in filas]
-    promedio = round(sum(puntajes) / len(puntajes), 1) if puntajes else None
-    return {"respuestas": len(puntajes), "puntaje_promedio": promedio, "cumple_objetivo_68": (promedio >= 68) if promedio is not None else None,
-            "detalle": [{"usuario_id": f.usuario_id, "fecha": f.fecha, "puntaje": f.puntaje, "comentario": f.comentario} for f in filas]}
+    puntajes = [puntaje_guardado(f.respuestas) for f in filas]  # exactos, sin el redondeo de la columna
+    promedio = sum(puntajes) / len(puntajes) if puntajes else None
+    return {"respuestas": len(puntajes), "puntaje_promedio": round(promedio, 1) if promedio is not None else None,
+            "cumple_objetivo_68": (promedio >= 68) if promedio is not None else None,
+            "detalle": [{"usuario_id": f.usuario_id, "fecha": f.fecha, "puntaje": p, "comentario": f.comentario} for f, p in zip(filas, puntajes)]}
